@@ -1,11 +1,14 @@
 # Create the cleaned data for the regressions
 
 setwd("..") #move up one
-
 rm(list = ls())
+
 # Libraries
 library(readxl)
-library(tidyverse)
+library(tidyr)
+
+# old version to avoid bug with memory
+# devtools::install_version("haven", version = "1.1.0") 
 library(haven) #dta files
 
 # Parameters
@@ -13,20 +16,61 @@ library(haven) #dta files
 
 # Paths
 
-path.data.raw <- "data raw/"
-path.data.out <- "data processed/"
+path.data.raw <- "0 data raw/"
+path.data.out <- "1 data processed/"
 
 # 1. Load data -----------------------------------------------------------------
 
-trade.costs <- read_csv(paste0(path.data.raw, "ESCAP-WB-tradecosts-dataset-complete-2018.csv"))
-UNCTAD <- read_dta(paste0(path.data.raw, "UNCTAD_NTM_hs6_2010_2019_clean_v.12.dta"))
+
+
+#Missing values represent infinite trade costs, meaning countries do not trade
+sheets <- c("AB", "D", "GTT")
+trade.costs <- data.frame()
+
+for(i in sheets){
+  sheet <- read_xlsx(paste0(path.data.raw, 
+                            "20220509-ESCAP-WB-tradecosts-dataset.xlsx"), 
+                     sheet = i)
+  
+  trade.costs    <- rbind(trade.costs, sheet)
+};rm(sheet)
+
+# trade.costs: 
+# Sector: ISIC rev. 3
+
+
+UNCTAD <- read_dta(paste0(path.data.raw, 
+                          "UNCTAD_NTM_hs6_2010_2019_clean_v.12.dta"))
+#see UNCTAD TRAINS Database manual 
+#(https://unctad.org/system/files/official-document/ditctab2017d3_en.pdf)
+
+
+distance.variables <- read_dta(paste0(path.data.raw, 
+                                      "CEPII_Distance_Variables.dta"))
+
+geo.variables <- read_dta(paste0(path.data.raw, 
+                                      "CEPII_Geo_Variables.dta"))
+
 
 # 2. Prep data -----------------------------------------------------------------
 
-trade.costs[trade.costs == ".."] <- NA #.. denotes no value, change to NA
-names(trade.costs) <- gsub("\\[(.*)\\]","", names(trade.costs), perl = T) # change weird year name format
+#trade costs
+# trade.costs[trade.costs == ".."] <- NA #.. denotes no value, change to NA
+# names(trade.costs) <- gsub("\\[(.*)\\]","", names(trade.costs), perl = T)
+# trade.costs <- pivot_longer(trade.costs, 
+#                             7:ncol(trade.costs), 
+#                             names_to  = "year", 
+#                             values_to = "tij")
 
-trade.costs <- pivot_longer(trade.costs, 7:ncol(trade.costs), names_to = "year", values_to = "tij") #bring into longer format for matching
+#TRAINS
+
+test <- UNCTAD %>% filter("StartDate" >= 2009)
+
+
+# 3. save processed data -------------------------------------------------------
+
+saveRDS(trade.costs, file = paste0(path.data.out, 
+                                   "Trade Costs Processed.RData"))
 
 
 
