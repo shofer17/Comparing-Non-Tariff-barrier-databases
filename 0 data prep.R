@@ -6,6 +6,8 @@ rm(list = ls())
 # Libraries
 library(readxl)
 library(tidyr)
+library(magrittr)
+library(dplyr)
 
 # old version to avoid bug with memory
 # devtools::install_version("haven", version = "1.1.0") 
@@ -13,6 +15,7 @@ library(haven) #dta files
 
 # Parameters
 
+years <- c(2009, 2019)
 
 # Paths
 
@@ -29,7 +32,7 @@ trade.costs <- data.frame()
 
 for(i in sheets){
   sheet <- read_xlsx(paste0(path.data.raw, 
-                            "20220509-ESCAP-WB-tradecosts-dataset.xlsx"), 
+                            "ESCAP-WB-tradecosts-dataset-20220509.xlsx"), 
                      sheet = i)
   
   trade.costs    <- rbind(trade.costs, sheet)
@@ -55,6 +58,11 @@ geo.variables <- read_dta(paste0(path.data.raw,
 # 2. Prep data -----------------------------------------------------------------
 
 #trade costs
+trade.costs <- trade.costs %>% filter(year >= min(years) & year <= max(years))
+test <- na.omit(trade.costs)
+
+#DROP HALF SAMPLE TO AVOID REPETITON
+
 # trade.costs[trade.costs == ".."] <- NA #.. denotes no value, change to NA
 # names(trade.costs) <- gsub("\\[(.*)\\]","", names(trade.costs), perl = T)
 # trade.costs <- pivot_longer(trade.costs, 
@@ -64,7 +72,7 @@ geo.variables <- read_dta(paste0(path.data.raw,
 
 #TRAINS
 
-test <- UNCTAD %>% filter("StartDate" >= 2009)
+test <- UNCTAD %>% filter("StartDate" >= min(years))
 
 
 # 3. save processed data -------------------------------------------------------
