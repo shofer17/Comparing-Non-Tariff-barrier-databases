@@ -89,3 +89,38 @@ if(F){
   writexl::write_xlsx(ISIC, path = paste0(path.data.out, 
                                           "ISIC chapter codes.xlsx"))
 }
+
+
+# 3. Consistency of HS Chapters ------------------------------------------------
+# Check if all 2 digit HS chapters have remaind constant over time. 
+
+if(F){
+  links <- data.frame("HS02" = "https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs_nomenclature_previous_editions/hs_nomenclature_table_2002.aspx",
+                      "HS07" = "https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs_nomenclature_previous_editions/hs_nomenclature_table_2007.aspx",
+                      "HS12" = c("https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs_nomenclature_previous_editions/hs_nomenclature_table_2012.aspx"),
+                      "HS17" = c("https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs-nomenclature-2017-edition/hs-nomenclature-2017-edition.aspx"),
+                      "HS22" = "https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs-nomenclature-2022-edition/hs-nomenclature-2022-edition.aspx")
+  
+  hs.comparison <- data.frame("chapter" = 1:99)
+  
+  for(i in 1:ncol(links)){
+    hs.tables <- links[1,i]
+    hs.tables <- xml2::read_html(hs.tables)
+    hs.tables <- rvest::html_table(hs.tables)[[2]] %>% 
+      tibble::as_tibble(.name_repair = "unique")%>%
+      filter(X1 !="")%>%
+      select(-X3)
+    names(hs.tables) <- c("chapter", paste0("description_",names(links)[i] ))
+    
+    hs.comparison <- merge(hs.comparison, hs.tables, by = "chapter", all.y = T)
+  }
+  writexl::write_xlsx(hs.comparison, path = paste0(path.data.out, 
+                                          "HS Vintage comparison.xlsx"))
+  hs.comparison$different_descriptions <- apply(hs.comparison, 1, FUN = function(x) length(unique(x)))-1
+  hs.differences <- hs.comparison[ hs.comparison$different_descriptions >1, 2:(ncol(hs.comparison)-1)]
+  test <- apply(hs.differences, 1, FUN = function(x) unique(x))
+  #even remaining categories remain basically the same, just with minor adjustments.
+  #Therefore, using the chapters for conversion to ISIC can be used without regard for the 
+  #HS code version they are in. As I could not find the HS version the tmdb database used, 
+  #I will assume two digit hs codes  given are equal or equivalent to two digit HS4 (2012) codes. 
+}
