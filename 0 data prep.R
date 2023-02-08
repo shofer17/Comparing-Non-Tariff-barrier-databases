@@ -6,12 +6,19 @@
 
 setwd("..") # move up one
 rm(list = ls())
-
+#install.packages("gsubfn")
+#install.packages("remotes")
+#remotes::install_github("insongkim/concordance")
+library(concordance)
+library(gsubfn)
 library(readxl)
 library(tidyr)
 library(magrittr)
 library(dplyr)
-library(xml2) #webscraping WTO names table
+library(lubridate)
+library(splitstackshape)
+library(gtalibrary)
+library(stringr)
 # old version to avoid memory bug 
 # devtools::install_version("haven", version = "1.1.0") 
 library(haven) #dta files
@@ -110,39 +117,90 @@ test <- UNCTAD %>% filter("StartDate" >= min(years))
 
 ## 2.3 WTO ---------------------------------------------------------------------
 
-if(F){ # get WTO conversion table, only exectue if new version is necessary
-  # Get WTO country names to ISO conversions
-  # download html and get table
-  wto.names.to.iso <- "https://docs.wto.org/gtd/Default.aspx?pagename=WTOIsocodes&langue=e"
-  wto.names.to.iso <- xml2::read_html(wto.names.to.iso)
-  wto.names.to.iso <- rvest::html_table(wto.names.to.iso)[[4]] %>% 
-    tibble::as_tibble(.name_repair = "unique")
-  
-  # clean table
-  wto.names.to.iso <- wto.names.to.iso[1:97, 1:4]
-  names(wto.names.to.iso) <- c("Name", "ISO", "Name", "ISO")
-  wto.names.to.iso <- rbind(wto.names.to.iso[, 1:2], wto.names.to.iso[, 3:4])
-  wto.names.to.iso <- na.omit(wto.names.to.iso)
-  wto.names.to.iso$Name <- gsub("(\r|\n|\t)", "", wto.names.to.iso$Name)
-  wto.names.to.iso$ISO <- gsub("(\r|\n|\t)", "", wto.names.to.iso$ISO)
-  
-  # adjust some values manually
-  wto.names.to.iso[wto.names.to.iso$Name == "Eswatini (formerly Swaziland)", "Name"] <- "Eswatini"
-  wto.names.to.iso[wto.names.to.iso$Name == "European Union formerly European Communities", "Name"] <- "European Union"
-  wto.names.to.iso[wto.names.to.iso$ISO == "EUEEC", "ISO"] <- "EU"
-  wto.names.to.iso[wto.names.to.iso$Name == "Romania formerly Romania", "Name"] <- "Romania"
-  wto.names.to.iso[wto.names.to.iso$ISO == "ROUROM", "ISO"] <- "ROU"
-  wto.names.to.iso[wto.names.to.iso$ISO == "TPKM", "ISO"] <- "TWN"
-  
-  writexl::write_xlsx(wto.names.to.iso, path = paste0(path.data.out, "WTO ISO conversions.xlsx"))
-}
-
+# Load in conversions
 wto.names.to.iso <- readxl::read_xlsx(path = paste0(path.data.out, 
                                                     "WTO ISO conversions.xlsx"))
+isic.chapters <- readxl::read_xlsx(path = paste0(path.data.out, 
+                                                    "ISIC chapter codes.xlsx"))
+
+# restrict dataset 
+WTO <- WTO %>% 
+  filter(`Measure class` == "Restrictive"& #only get restrictive measures
+         !is.na(Products))%>% #only get measures that have product codes
+  select(-`Measure class`) 
+  
+
+# split trading partners and get partners w. individual termination date
+WTO <- cSplit(WTO, "Trading partners", sep = ";", direction = "long")
+WTO$termin.p.partner <- ifelse(grepl("\\((.*)\\)", WTO$`Trading partners`),
+                                      as.character(WTO$`Trading partners`),NA)
 
 
+# get termination date
+WTO$termin.p.partner <- as.character(strapplyc(WTO$termin.p.partner, 
+                                                "[0-9]{2}/[0-9]{2}/[0-9]{4}", 
+                                                simplify = TRUE))
+WTO$termin.p.partner <- ifelse(WTO$termin.p.partner == "character(0)", NA, 
+                               WTO$termin.p.partner)
+
+#add individual termination date to general termination date
+WTO <- WTO %>%  
+  mutate(Terminated = as.Date(Terminated))%>%
+  mutate(termin.p.partner = as_date(termin.p.partner, format = '%d/%m/%Y'))%>%
+  mutate(Terminated = if_else(!is.na(termin.p.partner), 
+                              termin.p.partner, 
+                              Terminated))%>%
+  mutate(`Trading partners` = gsub(pattern = " \\((.*)\\)",
+                                   replacement = "",
+                                   `Trading partners`))%>%
+  select(-termin.p.partner )
+  
+
+# add ISO codes
+WTO <- merge(WTO, wto.names.to.iso, by.x = "Member/Observer", by.y = "Name")
+names(WTO)[ncol(WTO)] <- "ISO_Observer/Member"
+
+WTO <- merge(WTO, wto.names.to.iso, by.x = "Trading partners", by.y = "Name", all.x = T)
+names(WTO)[ncol(WTO)] <- "ISO_Trading partner"
 
 
+# only get active measures during observation period
+WTO <- WTO%>%filter((is.na(Terminated)|Terminated < as.Date(paste0(max(years), "-12-31"))) &
+                    `Implemented at` > as.Date(paste0(min(years), "-01-01"))&
+                    `Implemented at` < as.Date(paste0(max(years), "-12-31")))
+
+
+#go trough all hs products and convert them to ISIC
+WTO$ISIC <- NA
+
+for(i in 1:length(WTO$Products)){
+  prod <- WTO$`Product chapters`[i]
+  if(!is.na(prod)){
+    t <- unlist(str_split(prod, pattern = ",")) #get single HS coes
+    t <- gsub(" ", "", t)
+    t <- ifelse(nchar(t) == 1, paste0("0",t), t)
+    # t <- gta_hs_vintage_converter(t) #convert to HS2012
+    # t <- ifelse(nchar(t) == 5, paste0(0, t),#add leading zeros
+    #         ifelse(nchar(t) == 4, paste0("00", t),
+    #         t))
+    t <- data.frame(unique(concord_hs_isic(t, #convert to ISIC
+                                           origin = "HS4", 
+                                           destination = "ISIC3", 
+                                           dest.digit = 2
+                                           )))
+    names(t) <- "code"
+    t <- merge(t, isic.chapters, by = "code") #get ISIC chapters
+    WTO$ISIC[i] <- paste0(unique(t$chapter), collapse = ",") #save
+  }else{
+    
+  }
+}
+
+#remove unnecessary variables
+WTO <- WTO %>% select(-c(Source, Status, Description, `Product chapters`, Products))
+
+writexl::write_xlsx(WTO, path = paste0(path.data.out, 
+                                                 "WTO cleaned.xlsx"))
 
 ## 2.4 CEPII Gravity control variables ----------------------------------------
 
