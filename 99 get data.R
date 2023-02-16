@@ -4,15 +4,17 @@
 # This script scrapes and downloads data for analysis if a simpler way 
 # was not possible.  
 
-library(httr)
-library(jsonlite)
-library(RSelenium)
-library(rvest)
-library(xml2)
-library(XML)
+# library(httr)
+# library(jsonlite)
+# library(RSelenium)
+# library(rvest)
+# library(xml2)
+# library(XML)
 library(tidyr)
 library(dplyr)
 library(gtalibrary)
+library(stringr)
+library(splitstackshape)
 
 path.data.raw <- "0 data raw/"
 path.data.out <- "1 data processed/"
@@ -206,11 +208,14 @@ if(T){
 
 UNCTAD.countries.conversion <- merge(UNCTAD.countries, country.names, by.x = "GTA.name", by.y = "name", all.x = T)
 UNCTAD.countries.conversion <- UNCTAD.countries.conversion[!is.na(UNCTAD.countries.conversion$un_code), c("GTA.name", "UNCTAD.name", "un_code")]
+UNCTAD.countries.conversion <- rbind(UNCTAD.countries.conversion, c("EU", "European Union", NA))
+
 
 writexl::write_xlsx(UNCTAD.countries.conversion, path = paste0(path.data.out, 
                                                                "UNCTAD_GTA_conversion.table.xlsx"))
 
 rm(UNCTAD.countries)
+
 ## 2. Try selenium -------------------------------------------------------------
 # Selenium is quite unstable. Also, the website makes things complicated to scrape to the point 
 # where it is faster (and safer) to do it manually. As I only do it once, that should not pose an issue. 
@@ -408,8 +413,8 @@ rm(UNCTAD.countries)
   # 
   # 
   # 
-  # saveRDS(UNCTAD, file = paste0(path.data.raw, "UNCTAD_TRAINS_database.RData"))
-  # write.csv(UNCTAD, file = paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
+  # saveRDS(UNCTAD, file = paste0(path.data.raw, "TRAINS_database.RData"))
+  # write.csv(UNCTAD, file = paste0(path.data.raw, "TRAINS_database.csv"))
   # test <- test[,3:ncol(test)]
   # test <- unique(test)
   # # close Selenium and close port
@@ -474,6 +479,75 @@ rm(UNCTAD.countries)
 
 
 files <- list.files(path = paste0(path.data.raw,  #get all files in directory
+                                  "TRAINS_downloads"), 
+                    all.files = T,
+                    full.names = T)
+files <- files[!files %in% c("0 data raw/TRAINS_downloads/.",
+                             "0 data raw/TRAINS_downloads/..")]
+
+
+TRAINS <- data.frame()
+
+for(i in 1:length(files)){ # download all files from downloads folder
+  
+  data.loop <- readxl::read_xlsx(path = files[i],
+                                 skip = 7)
+  
+  TRAINS <- rbind(TRAINS, data.loop)
+}
+
+TRAINS <- unique(TRAINS)
+rm(data.loop, i, files)
+
+
+write.csv(TRAINS, file = paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"), row.names = F)
+
+### 3.2 clean  -----------------------------------------------------------------
+
+TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
+
+#clean frame
+names(TRAINS) <- c("implementing.jurisdiction","affected.jurisdiction",
+                          "mast.chapter","description", "product.description",
+                          "hs.code", "issuing.agency","regulation.title",
+                          "regulation.symbol","date.implemented",
+                          "official.regulation.document","official.title.original.language",     
+                          "measure.description.original.language", "product.description.original.language",
+                          "supporting/related.regulations","measure.objective",
+                          "years.of.data.collection","date.removed")
+
+TRAINS <- TRAINS %>% select(-c(product.description.original.language, 
+                                          official.title.original.language, 
+                                          `supporting/related.regulations`, 
+                                          years.of.data.collection, 
+                                          official.regulation.document,
+                                          measure.description.original.language,
+                                          regulation.symbol,
+                                          issuing.agency))
+
+
+TRAINS <- TRAINS %>% 
+  mutate(mast.chapter =  gsub("[0-9]", "", mast.chapter)) %>% #remove MAST subchapters
+  mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T)) %>% #remove HS explenations
+  mutate(measure.id = 1:nrow(TRAINS)) #add unique id
+
+TRAINS <- unique(cSplit(TRAINS, "hs.code", direction = "long")) #some HS codes are double
+
+
+
+
+### 3.3 Check potential missing downloads  -------------------------------------
+
+#check if all countries are downloaded
+sum(unique(TRAINS$implementing.jurisdiction) %in% UNCTAD.countries.conversion$UNCTAD.name)
+missing.countries <- UNCTAD.countries.conversion$UNCTAD.name[!UNCTAD.countries.conversion$UNCTAD.name %in% unique(TRAINS$implementing.jurisdiction)]
+eu.countries <- c("Austria", "Belgium", "Denmark", "Finland", "France", "Germany", "Greece", "Ireland", "Italy", "Malta", "Luxembourg","Portugal", "Romania", "Spain", "Sweden", "Netherlands") # just have EU values if downloaded
+missing.countries <- missing.countries[!missing.countries %in% eu.countries]
+
+
+
+# check if all data got downloaded from countries where more than one download was needed
+files <- list.files(path = paste0(path.data.raw,  #get all files in directory
                                   "UNCTAD_TRAINS_downloads"), 
                     all.files = T,
                     full.names = T)
@@ -481,24 +555,51 @@ files <- files[!files %in% c("0 data raw/UNCTAD_TRAINS_downloads/.",
                              "0 data raw/UNCTAD_TRAINS_downloads/..")]
 
 
-UNCTAD_TRAINS <- data.frame()
-
+download.info <- data.frame()
 for(i in 1:length(files)){ # download all files from downloads folder
   
   data.loop <- readxl::read_xlsx(path = files[i],
-                                 skip = 7)
+                                 skip = 2, #just get columns with description
+                                 n_max = 6,
+                                 col_names = F)
   
-  UNCTAD_TRAINS <- rbind(UNCTAD_TRAINS, data.loop)
+  data.loop <- data.frame(t(data.loop))
+  names(data.loop) <- as.character(unlist(data.loop[1,]))
+  data.loop <- data.loop[-1,]
+  
+  download.info <- rbind(download.info, data.loop)
 }
 
-UNCTAD_TRAINS <- unique(UNCTAD_TRAINS)
 rm(data.loop, i, files)
-### 3.2 Check potential missing downloads  -------------------------------------
+row.names(download.info) <- 1:nrow(download.info)
+names(download.info) <- c("measure.type", "implementing.country", "affected.country", "hs.code")
 
-sum(unique(UNCTAD_TRAINS$`Country imposing NTM(s)`) %in% UNCTAD.countries.conversion$UNCTAD.name)
-missing.countries <- UNCTAD.countries.conversion$UNCTAD.name[!UNCTAD.countries.conversion$UNCTAD.name %in% unique(UNCTAD_TRAINS$`Country imposing NTM(s)`)]
-eu.countries <- c("Austria", "Belgium", "Denmark", "Finland", "")
+download.info <- download.info[!(download.info$measure.type == "All" & #countries where more than one download was needed
+                               download.info$affected.country == "All" &
+                               download.info$hs.code == "All"),
+                                 ]
+checked.countries <- c("South Korea", "Indonesia","Brazil","Viet Nam") #only MAST chapter was varied
+download.info <- download.info[!download.info$implementing.country %in% checked.countries,]
+
+#download their content again separetely to make sure everything is properly downloaded
+checked.countries.2 <- c("Peru", "Panama", "New Zealand", "Thailand", "China", "United States of America") #only MAST chapter was varied
 
 
-to.check.if.all.hs <- c("China", "United States of America", "Philipines", "Thailand", "Viet Nam")
-to.check.if.all.mast <- c("China")
+# download.info$hs.code[download.info$hs.code == "All"] <- 999999 #set all to 999999 to not loose them when Csplitting
+# download.info <- download.info %>% mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T))
+# download.info <- cSplit(download.info, "hs.code", direction = "long")
+# download.info <- download.info %>% 
+#   filter(!is.na(hs.code)) %>%
+#   mutate(hs.code = as.numeric(substr(hs.code, 1,2)))%>%
+#   unique()
+#   
+# test <- aggregate(data = download.info, hs.code ~ cbind(implementing.country) , FUN = function(x) paste0(x))
+# hist(as.numeric(unique(test$hs.code[[1]])), breaks = 100)
+# #hist(as.numeric(unique(test$hs.code[[2]])), breaks = 100)
+# hist(as.numeric(unique(test$hs.code[[3]])), breaks = 100)
+# hist(as.numeric(unique(test$hs.code[[4]])), breaks = 100)
+# hist(as.numeric(unique(test$hs.code[[5]])), breaks = 100)
+# hist(as.numeric(unique(test$hs.code[[6]])), breaks = 100)
+# hist(as.numeric(unique(test$hs.code[[7]])), breaks = 100)
+
+
