@@ -90,8 +90,34 @@ if(F){
                                           "ISIC chapter codes.xlsx"))
 }
 
+# 3. HS to ISIC conversion -----------------------------------------------------
+# write a file to convert 2 digit HS codes to ISIC
+hs.2.dig <- as.character(1:99)
+hs.2.dig <- ifelse(nchar(hs.2.dig) == 1, paste0(0, hs.2.dig), hs.2.dig)
 
-# 3. Consistency of HS Chapters ------------------------------------------------
+hs.2.dig.to.isic <- data.frame("hs.code" = hs.2.dig,
+                               "isic.code" = NA)
+  
+#loop to also catch cases where one hs code returns multiple isic
+for(i in 1:nrow(hs.2.dig.to.isic)){
+  
+  codes <-  concord_hs_isic(hs.2.dig.to.isic$hs.code[i], #convert to ISIC
+                            origin = "HS4", 
+                            destination = "ISIC3", 
+                            dest.digit = 2
+                            )
+  hs.2.dig.to.isic$isic.code[i] <- paste0(codes, collapse = ",")
+  
+}
+  
+hs.2.dig.to.isic <- hs.2.dig.to.isic[hs.2.dig.to.isic$isic.code != "NA", ] #chapters 77, 98, and 99 could not be matched
+hs.2.dig.to.isic <- merge(hs.2.dig.to.isic, ISIC, by.x = "isic.code", by.y = "code", all.x = T, all.y = T)
+hs.2.dig.to.isic <- hs.2.dig.to.isic[!is.na(hs.2.dig.to.isic$hs.code), ] #only needs codes for HS chapters
+
+writexl::write_xlsx(hs.2.dig.to.isic, paste0(path.data.out, 
+                                             "ISIC to HS 2 digits conversion.xlsx"))
+
+# 4. Consistency of HS Chapters ------------------------------------------------
 # Check if all 2 digit HS chapters have remaind constant over time. 
 
 if(F){

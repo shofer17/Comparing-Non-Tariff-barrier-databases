@@ -1,0 +1,13 @@
+# Author: Silvan Hofer
+# Date: 17. February 2023
+# Purpose: 
+# This script combines data and makes it ready for analysis.
+# 
+rm(list = ls())
+
+years <- 2009:2019
+
+# Paths
+
+path.data.raw <- "0 data raw/"
+path.data.out <- "1 data processed/"

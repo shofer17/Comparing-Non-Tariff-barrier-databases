@@ -2,6 +2,7 @@
 
 library(ggplot2)
 library(gtalibrary)
+setwd("..") #move up one
 
 path.plots <- "2 plots"
 
@@ -56,7 +57,7 @@ p <- ggplot(data = data, aes(x = x, y = y, color = key))+
                      labels = c("Without upper limit",paste0("With upper limit at ", threshold)))+
   labs(colour="")+
   gta_theme(legend.position = "bottom")+
-  ggtitle("The effect of threshold for missing values on parameter estimation")+
+  ggtitle("The effect of a threshold for missing values in parameter estimation")+
   facet_wrap(.~group)
 p
 

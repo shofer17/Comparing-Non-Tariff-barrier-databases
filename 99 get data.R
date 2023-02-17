@@ -479,11 +479,11 @@ rm(UNCTAD.countries)
 
 
 files <- list.files(path = paste0(path.data.raw,  #get all files in directory
-                                  "TRAINS_downloads"), 
+                                  "UNCTAD_TRAINS_downloads"), 
                     all.files = T,
                     full.names = T)
-files <- files[!files %in% c("0 data raw/TRAINS_downloads/.",
-                             "0 data raw/TRAINS_downloads/..")]
+files <- files[!files %in% c("0 data raw/UNCTAD_TRAINS_downloads/.",
+                             "0 data raw/UNCTAD_TRAINS_downloads/..")]
 
 
 TRAINS <- data.frame()
@@ -499,51 +499,15 @@ for(i in 1:length(files)){ # download all files from downloads folder
 TRAINS <- unique(TRAINS)
 rm(data.loop, i, files)
 
-
 write.csv(TRAINS, file = paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"), row.names = F)
 
-### 3.2 clean  -----------------------------------------------------------------
-
-TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
-
-#clean frame
-names(TRAINS) <- c("implementing.jurisdiction","affected.jurisdiction",
-                          "mast.chapter","description", "product.description",
-                          "hs.code", "issuing.agency","regulation.title",
-                          "regulation.symbol","date.implemented",
-                          "official.regulation.document","official.title.original.language",     
-                          "measure.description.original.language", "product.description.original.language",
-                          "supporting/related.regulations","measure.objective",
-                          "years.of.data.collection","date.removed")
-
-TRAINS <- TRAINS %>% select(-c(product.description.original.language, 
-                                          official.title.original.language, 
-                                          `supporting/related.regulations`, 
-                                          years.of.data.collection, 
-                                          official.regulation.document,
-                                          measure.description.original.language,
-                                          regulation.symbol,
-                                          issuing.agency))
-
-
-TRAINS <- TRAINS %>% 
-  mutate(mast.chapter =  gsub("[0-9]", "", mast.chapter)) %>% #remove MAST subchapters
-  mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T)) %>% #remove HS explenations
-  mutate(measure.id = 1:nrow(TRAINS)) #add unique id
-
-TRAINS <- unique(cSplit(TRAINS, "hs.code", direction = "long")) #some HS codes are double
-
-
-
-
-### 3.3 Check potential missing downloads  -------------------------------------
+### 3.2 Check potential missing downloads  -------------------------------------
 
 #check if all countries are downloaded
-sum(unique(TRAINS$implementing.jurisdiction) %in% UNCTAD.countries.conversion$UNCTAD.name)
-missing.countries <- UNCTAD.countries.conversion$UNCTAD.name[!UNCTAD.countries.conversion$UNCTAD.name %in% unique(TRAINS$implementing.jurisdiction)]
+sum(unique(TRAINS$`Country imposing NTM(s)`) %in% UNCTAD.countries.conversion$UNCTAD.name)
+missing.countries <- UNCTAD.countries.conversion$UNCTAD.name[!UNCTAD.countries.conversion$UNCTAD.name %in% unique(TRAINS$`Country imposing NTM(s)`)]
 eu.countries <- c("Austria", "Belgium", "Denmark", "Finland", "France", "Germany", "Greece", "Ireland", "Italy", "Malta", "Luxembourg","Portugal", "Romania", "Spain", "Sweden", "Netherlands") # just have EU values if downloaded
 missing.countries <- missing.countries[!missing.countries %in% eu.countries]
-
 
 
 # check if all data got downloaded from countries where more than one download was needed
@@ -553,7 +517,6 @@ files <- list.files(path = paste0(path.data.raw,  #get all files in directory
                     full.names = T)
 files <- files[!files %in% c("0 data raw/UNCTAD_TRAINS_downloads/.",
                              "0 data raw/UNCTAD_TRAINS_downloads/..")]
-
 
 download.info <- data.frame()
 for(i in 1:length(files)){ # download all files from downloads folder
@@ -574,6 +537,7 @@ rm(data.loop, i, files)
 row.names(download.info) <- 1:nrow(download.info)
 names(download.info) <- c("measure.type", "implementing.country", "affected.country", "hs.code")
 
+#check content of downloads using multiple files
 download.info <- download.info[!(download.info$measure.type == "All" & #countries where more than one download was needed
                                download.info$affected.country == "All" &
                                download.info$hs.code == "All"),
@@ -581,8 +545,8 @@ download.info <- download.info[!(download.info$measure.type == "All" & #countrie
 checked.countries <- c("South Korea", "Indonesia","Brazil","Viet Nam") #only MAST chapter was varied
 download.info <- download.info[!download.info$implementing.country %in% checked.countries,]
 
-#download their content again separetely to make sure everything is properly downloaded
-checked.countries.2 <- c("Peru", "Panama", "New Zealand", "Thailand", "China", "United States of America") #only MAST chapter was varied
+#download their content again separately to make sure everything is properly downloaded
+checked.countries.2 <- c("Peru", "Panama", "New Zealand", "Thailand", "China", "United States of America")
 
 
 # download.info$hs.code[download.info$hs.code == "All"] <- 999999 #set all to 999999 to not loose them when Csplitting
