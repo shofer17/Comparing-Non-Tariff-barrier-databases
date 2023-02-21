@@ -16,10 +16,11 @@ library(gtalibrary)
 library(stringr)
 library(splitstackshape)
 
+rm(list = ls())
+
 path.data.raw <- "0 data raw/"
 path.data.out <- "1 data processed/"
 
-rm(list = ls())
 # TRAINS (UNCTAD) --------------------------------------------------------------
 ## 1. convert UNCTAD to GTA names --------------------------------------------------
 UNCTAD.countries <- "Afghanistan

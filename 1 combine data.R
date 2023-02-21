@@ -11,3 +11,10 @@ years <- 2009:2019
 
 path.data.raw <- "0 data raw/"
 path.data.out <- "1 data processed/"
+
+
+# 1. Load data -----------------------------------------------------------------
+# 
+trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
+WTO <- readRDS(file = paste0(path.data.out, "WTO.RData"))
+TRAINS <- readRDS(file = paste0(path.data.out, "TRAINS cleaned.RData"))

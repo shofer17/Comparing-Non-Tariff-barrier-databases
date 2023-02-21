@@ -5,7 +5,7 @@
 # from various sources (CEPII, GTA, UNCTAD, WB) for analysis in 1 data analysis.
 
 # The data will be standardised in the following: 
-# 1. All product codes will be translated into ISIC 3.1.
+# 1. All product codes will be translated into ISIC 3.
 # 2. Countries are specified by 3-digits ISO codes. 
 # 3. All measures are classified as liberalising or restrictive
 # 4. Country-MAST chapter combinations will be aggregared to get number of interventions per combination
@@ -58,13 +58,26 @@ for(i in sheets){ # takes a while
   
 }
 
-rm(sheet)
 
 ## Clean
 
-trade.costs <- trade.costs %>% filter(year >= min(years) & year <= max(years))
+trade.costs <- trade.costs %>% filter(year >= min(years) & year <= max(years)) %>%
+  select(-c(reportername, partnername, sectorname))
 
-#DROP HALF SAMPLE TO AVOID REPETITON
+#DROP HALF SAMPLE TO AVOID REPETITON (tariffs are bidirectional, so each tariff shows up twice)
+#To compute efficiently, sort all ISO codes per row alphabetically and apply unique()
+trade.costs$reporter.backup <- trade.costs$reporter
+
+trade.costs$reporter <- ifelse(trade.costs$reporter < trade.costs$partner, 
+                               trade.costs$reporter, 
+                               trade.costs$partner)
+trade.costs$partner <- ifelse(trade.costs$partner > trade.costs$reporter.backup, 
+                              trade.costs$partner, 
+                              trade.costs$reporter.backup)
+
+trade.costs <- trade.costs %>%
+  select(-reporter.backup) %>%
+  unique()
 
 # trade.costs[trade.costs == ".."] <- NA #.. denotes no value, change to NA
 # names(trade.costs) <- gsub("\\[(.*)\\]","", names(trade.costs), perl = T)
@@ -76,6 +89,9 @@ trade.costs <- trade.costs %>% filter(year >= min(years) & year <= max(years))
 # Save
 saveRDS(trade.costs, file = paste0(path.data.out, 
                                    "Trade Costs Processed.RData"))
+
+writexl::write_xlsx(trade.costs, path = paste0(path.data.out, 
+                                          "Trade Costs Processed.xlsx"))
 
 rm(sheet, trade.costs)
 # 2. TRAINS ------------------------------------------------------------------
@@ -102,13 +118,19 @@ TRAINS <- TRAINS %>% select(-c(product.description.original.language,
                                official.regulation.document,
                                measure.description.original.language,
                                regulation.symbol,
-                               issuing.agency))
+                               issuing.agency,
+                               measure.objective))
 
 
 
 any(is.na(TRAINS$date.removed))
+
+TRAINS$date.implemented[is.na(TRAINS$date.implemented)] <- "1900-01-01" #NAs come from dates before 1900
 TRAINS <- TRAINS %>% 
-  filter(is.na(date.removed) | as.Date(date.removed) > as.Date(paste0(years[1],"-01-01"))) %>%
+  mutate(date.removed = as.numeric(year(date.removed)))%>%
+  mutate(date.implemented = as.numeric(year(date.implemented)))%>%
+  filter(is.na(date.removed) | date.removed > years[1]) %>%
+  filter(is.na(date.implemented) | date.implemented < max(years))%>%
   mutate(mast.chapter =  gsub("[0-9]", "", mast.chapter)) %>% #remove MAST subchapters
   mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T))  #remove HS explenations
 
@@ -122,7 +144,7 @@ TRAINS <- unique(TRAINS)
 # Therefore, they are matched manually to chapter C ("Mining and quarrying") in ISIC 3.1. It only affects 10 interventions. 
 hs.to.isic <- rbind(hs.to.isic, c(NA,98,"C"), c(NA,99,"C"))
 
-
+#get proper names, isic chapter and reduce dataframe
 TRAINS <- merge(TRAINS, hs.to.isic[, c("hs.code", "chapter")], by = "hs.code")
 TRAINS <- TRAINS %>% 
   select(-c(hs.code, description, product.description, regulation.title)) %>%
@@ -130,25 +152,33 @@ TRAINS <- TRAINS %>%
   filter(chapter %in% c("A", "D"))
 
 
-TRAINS <- merge(TRAINS, TRAINS.to.GTA.names, by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
-TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
+TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
+TRAINS <- TRAINS %>% 
+  mutate(implementing.jurisdiction = GTA.name) %>%
+  select(-GTA.name)
+
+TRAINS <- TRAINS %>%
+  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
+                               max(years),
+                               date.removed)) %>% #set everything to 2019 that is above that or has no removal date
+  mutate(date.implemented = ifelse(date.implemented < min(years), 
+                                   min(years), 
+                                   date.implemented)) #set everything before 2009 to 2009
+
+TRAINS$years.in.force <- apply(TRAINS[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
+TRAINS <- TRAINS %>% select(-c(date.removed, date.implemented))
+
+
+# In best case use GTA function to get proper affected countries
 
 
 countries.iso <- country.names[, c("name", "iso_code")]
 countries.iso <- rbind(countries.iso, c("European Union", "EU"))
 
-test <- TRAINS %>% 
-  select(implementing.jurisdiction)%>%
-  unique()
-test <- merge()
 
 # add ISO codes
-TRAINS <- merge(TRAINS, wto.names.to.iso, by.x = "Member/Observer", by.y = "Name")
-names(TRAINS)[ncol(TRAINS)] <- "ISO_Observer/Member"
-
-TRAINS <- merge(TRAINS, wto.names.to.iso, by.x = "Trading partners", by.y = "Name", all.x = T)
-names(TRAINS)[ncol(TRAINS)] <- "ISO_Trading partner"
-
+TRAINS <- merge(TRAINS, countries.iso, by.x = "implementing.jurisdiction", by.y = "name")
+names(TRAINS)[ncol(TRAINS)] <- "iso_implementer"
 
 
 ## Save
@@ -157,7 +187,7 @@ writexl::write_xlsx(TRAINS, path = paste0(path.data.out,
 saveRDS(TRAINS, file = paste0(path.data.out, 
                                    "TRAINS cleaned.RData"))
 
-
+rm(countries.iso, hs.to.isic, TRAINS.to.GTA.names)
 # 3. WTO TMDB ----------------------------------------------------------------
 
 ## Load
@@ -170,7 +200,7 @@ wto.names.to.iso <- readxl::read_xlsx(path = paste0(path.data.out,
 isic.chapters <- readxl::read_xlsx(path = paste0(path.data.out, 
                                                  "ISIC chapter codes.xlsx"))
 
-
+WTO$id <- 1:nrow(WTO)
 ## Clean
 #restrict dataset
 WTO <- WTO %>% 
@@ -246,12 +276,41 @@ for(i in 1:length(WTO$Products)){
 }
 
 #remove unnecessary variables
-WTO <- WTO %>% select(-c(Source, Status, Description, `Product chapters`, Products))
+WTO <- WTO %>% 
+  select(-c(Source, Status, Description, `Product chapters`, Products, `Member/Observer`, `Trading partners`))%>% 
+  select(c("ISO_Observer/Member","ISO_Trading partner","Implemented at","Terminated","Type", "ISIC", "id"))
+test <- WTO
+WTO <- test
+names(WTO) <- c("implementing.jurisdiction","affected.jurisdiction","date.implemented","date.removed","MAST.chapter", "ISIC", "id")
+WTO$date.implemented <- year(WTO$date.implemented)
+WTO$date.removed <- year(WTO$date.removed)
+WTO$date.removed <- ifelse(is.na(WTO$date.removed) | 
+                             WTO$date.removed > max(years), max(years), WTO$date.removed)
 
+WTO$years.in.force <- apply(WTO[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
+WTO <- WTO %>% select(-c(date.implemented, date.removed))%>%
+  filter(!is.na(affected.jurisdiction))
 
+WTO$implementing.jurisdiction.backup <- WTO$implementing.jurisdiction
+
+WTO$implementing.jurisdiction <- ifelse(WTO$implementing.jurisdiction < WTO$affected.jurisdiction, 
+                       WTO$implementing.jurisdiction, 
+                       WTO$affected.jurisdiction)
+WTO$affected.jurisdiction <- ifelse(WTO$affected.jurisdiction > WTO$implementing.jurisdiction.backup, 
+                      WTO$affected.jurisdiction, 
+                      WTO$implementing.jurisdiction.backup)
+WTO$implementing.jurisdiction.backup <- NULL
+
+WTO <- cSplit(WTO, "ISIC", direction = "long")
+WTO <- cSplit(WTO, "years.in.force", direction = "long")
+
+WTO <- aggregate(data = WTO,id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force, FUN = function(x) length(unique(x)))
+names(WTO) <- c("country.1", "country.2", "year", "number.of.interventions")
 ## Save
 writexl::write_xlsx(WTO, path = paste0(path.data.out, 
-                                       "WTO cleaned.xlsx"))
+                                       "WTO cleaned interventions.xlsx"))
+
+saveRDS(WTO, file = paste0(path.data.out, "WTO cleaned interventions.RData"))
 
 # 4. CEPII Gravity control variables ----------------------------------------
 
@@ -263,11 +322,11 @@ controls <- controls %>% filter(year %in% years &
                                 country_exists_d)
 
 # General controls
-distance.variables <- read_dta(paste0(path.data.raw, 
-                                      "CEPII_Distance_Variables.dta"))
-
-geo.variables <- read_dta(paste0(path.data.raw, 
-                                      "CEPII_Geo_Variables.dta"))
+# distance.variables <- read_dta(paste0(path.data.raw, 
+#                                       "CEPII_Distance_Variables.dta"))
+# 
+# geo.variables <- read_dta(paste0(path.data.raw, 
+#                                       "CEPII_Geo_Variables.dta"))
 
 
 
