@@ -241,34 +241,42 @@ writexl::write_xlsx(TRAINS, path = paste0(path.data.out,
 saveRDS(TRAINS, file = paste0(path.data.out, 
                                    "TRAINS_asymmetric_isic.RData"))
 
-rm(countries.iso, hs.to.isic, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
+rm(countries.iso, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
 
 
 # 3. WTO TMDB ----------------------------------------------------------------
-
-## Load
+## Load -------------
 WTO <- readxl::read_xlsx(path = paste0(path.data.raw, 
                                 "WTO_NTMs_Trade_Monitoring_Database.xlsx"))
-
-# Load in conversions
 wto.names.to.iso <- readxl::read_xlsx(path = paste0(path.data.out, 
                                                     "WTO ISO conversions.xlsx"))
 isic.chapters <- readxl::read_xlsx(path = paste0(path.data.out, 
                                                  "ISIC chapter codes.xlsx"))
+hs.12 <- data.frame(hs.codes[, "hs.code"])
+names(hs.12) <- "hs12.dig.6"
+hs.12$hs12.dig.6 <- ifelse(nchar(hs.12$hs12.dig.6) == 5, paste0(0, hs.12$hs12.dig.6), hs.12$hs12.dig.6)
+hs.12$hs12.dig.4 <- substr(hs.12$hs12.dig.6, 1,4)
+hs.12$hs12.dig.2 <- substr(hs.12$hs12.dig.6, 1,2)
+
 
 WTO$id <- 1:nrow(WTO)
-## Clean
+
+names(WTO) <- c("implementing.jurisdiction", "date.implemented","MAST.chapter","evaluation",
+                "hs.chapters", "hs.codes","affected.jurisdiction", 
+                "date.removed","measure.description","Source", "status","id" )
+
+
 #restrict dataset
 WTO <- WTO %>% 
-  filter(`Measure class` == "Restrictive"& #only get restrictive measures
-           !is.na(Products))%>% #only get measures that have product codes
-  select(-`Measure class`) 
+  filter(evaluation %in% c("Restrictive", "Trade remedy") & #only get restrictive measures
+           !is.na(hs.codes))%>% #only get measures that have product codes
+  select(-c(evaluation, Source, measure.description))
 
-
+## Dates -------------------
 # split trading partners and get partners w. individual termination date
-WTO <- cSplit(WTO, "Trading partners", sep = ";", direction = "long")
-WTO$termin.p.partner <- ifelse(grepl("\\((.*)\\)", WTO$`Trading partners`),
-                               as.character(WTO$`Trading partners`),NA)
+WTO <- cSplit(WTO, "affected.jurisdiction", sep = ";", direction = "long")
+WTO$termin.p.partner <- ifelse(grepl("\\((.*)\\)", WTO$affected.jurisdiction),
+                               as.character(WTO$affected.jurisdiction),NA)
 
 
 # get termination date
@@ -280,73 +288,99 @@ WTO$termin.p.partner <- ifelse(WTO$termin.p.partner == "character(0)", NA,
 
 #add individual termination date to general termination date
 WTO <- WTO %>%  
-  mutate(Terminated = as.Date(Terminated))%>%
+  mutate(date.removed = as.Date(date.removed))%>%
   mutate(termin.p.partner = as_date(termin.p.partner, format = '%d/%m/%Y'))%>%
-  mutate(Terminated = if_else(!is.na(termin.p.partner), 
+  mutate(date.removed = if_else(!is.na(termin.p.partner), 
                               termin.p.partner, 
-                              Terminated))%>%
-  mutate(`Trading partners` = gsub(pattern = " \\((.*)\\)",
+                              date.removed))%>%
+  mutate(affected.jurisdiction = gsub(pattern = " \\((.*)\\)",
                                    replacement = "",
-                                   `Trading partners`))%>%
-  select(-termin.p.partner )
-
-
-# add ISO codes
-WTO <- merge(WTO, wto.names.to.iso, by.x = "Member/Observer", by.y = "Name")
-names(WTO)[ncol(WTO)] <- "ISO_Observer/Member"
-
-WTO <- merge(WTO, wto.names.to.iso, by.x = "Trading partners", by.y = "Name", all.x = T)
-names(WTO)[ncol(WTO)] <- "ISO_Trading partner"
-
+                                   affected.jurisdiction))%>%
+  select(-termin.p.partner)
 
 # only get active measures during observation period
-WTO <- WTO%>%filter((is.na(Terminated)|Terminated < as.Date(paste0(max(years), "-12-31"))) &
-                      `Implemented at` > as.Date(paste0(min(years), "-01-01"))&
-                      `Implemented at` < as.Date(paste0(max(years), "-12-31")))
+WTO <- WTO%>%filter((is.na(date.removed)|date.removed < as.Date(paste0(max(years), "-12-31"))) &
+                      date.implemented > as.Date(paste0(min(years), "-01-01"))&
+                      date.implemented < as.Date(paste0(max(years), "-12-31")))
 
 
-#go trough all hs products and convert them to ISIC
-WTO$ISIC <- NA
-
-for(i in 1:length(WTO$Products)){
-  prod <- WTO$`Product chapters`[i]
-  if(!is.na(prod)){
-    t <- unlist(str_split(prod, pattern = ",")) #get single HS codes
-    t <- gsub(" ", "", t)
-    t <- ifelse(nchar(t) == 1, paste0("0",t), t)
-    # t <- gta_hs_vintage_converter(t) #convert to HS2012
-    # t <- ifelse(nchar(t) == 5, paste0(0, t),#add leading zeros
-    #         ifelse(nchar(t) == 4, paste0("00", t),
-    #         t))
-    t <- data.frame(unique(concord_hs_isic(t, #convert to ISIC
-                                           origin = "HS4", 
-                                           destination = "ISIC3", 
-                                           dest.digit = 2
-    )))
-    names(t) <- "code"
-    t <- merge(t, isic.chapters, by = "code") #get ISIC chapters
-    WTO$ISIC[i] <- paste0(unique(t$chapter), collapse = ",") #save
-  }else{
-    
-  }
-}
-
-#remove unnecessary variables
-WTO <- WTO %>% 
-  select(-c(Source, Status, Description, `Product chapters`, Products, `Member/Observer`, `Trading partners`))%>% 
-  select(c("ISO_Observer/Member","ISO_Trading partner","Implemented at","Terminated","Type", "ISIC", "id"))
-test <- WTO
-WTO <- test
-names(WTO) <- c("implementing.jurisdiction","affected.jurisdiction","date.implemented","date.removed","MAST.chapter", "ISIC", "id")
 WTO$date.implemented <- year(WTO$date.implemented)
-WTO$date.removed <- year(WTO$date.removed)
 WTO$date.removed <- ifelse(is.na(WTO$date.removed) | 
                              WTO$date.removed > max(years), max(years), WTO$date.removed)
 
 WTO$years.in.force <- apply(WTO[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
-WTO <- WTO %>% select(-c(date.implemented, date.removed))%>%
-  filter(!is.na(affected.jurisdiction))
+WTO <- WTO %>% select(-c(date.implemented, date.removed))
+## Names ---------------
 
+
+#MULTIPLE COUNTRIES!------------------
+
+# add ISO codes
+WTO <- merge(WTO, wto.names.to.iso, by.x = "implementing.jurisdiction", by.y = "Name")
+names(WTO)[ncol(WTO)] <- "ISO_implementing.jurisdiction"
+
+WTO <- merge(WTO, wto.names.to.iso, by.x = "affected.jurisdiction", by.y = "Name", all.x = T)
+names(WTO)[ncol(WTO)] <- "ISO_affected.jurisdiction"
+
+
+## HS codes ----------------------
+#go trough all hs products and convert them to ISIC
+
+WTO <- cSplit(WTO, "hs.codes", direction = "long", type.convert = F)
+
+#take 2 digit codes, add all 6 digit codes to it, convert to HS2012, and sum it up to one string
+WTO.2 <- merge(WTO[nchar(WTO$hs.codes)== 2,], hs.12[, c("hs12.dig.2", "hs12.dig.6")], by.x = "hs.codes", by.y = "hs12.dig.2", all.x = T, allow.cartesian = T)
+WTO.4 <- merge(WTO[nchar(WTO$hs.codes)== 4,], hs.12[, c("hs12.dig.4", "hs12.dig.6")], by.x = "hs.codes", by.y = "hs12.dig.4", all.x = T, allow.cartesian = T)
+WTO.6 <- data.frame(WTO[nchar(WTO$hs.codes)== 6, "hs.codes"])
+WTO.6$hs12.dig.6 <-  apply(WTO.6 <- WTO.6, 1, FUN = function(x) gta_hs_vintage_converter(x)) # Applying to each row separately that it guesses each code independantly to account for potentially different HS vintages.
+WTO.6 <- cbind(WTO.6, WTO[nchar(WTO$hs.codes)== 6, -"hs.codes"])
+
+WTO <- rbind(WTO.2, WTO.4, WTO.6)
+WTO$hs12.dig.6 <- as.character(WTO$hs12.dig.6)
+WTO <- WTO %>%
+  select(-hs.codes)%>%
+  unique()
+
+# aggregate all HS codes into a string and save it
+converted.hs <- aggregate(data = WTO[, c("id", "hs12.dig.6")],  hs12.dig.6 ~ id , FUN = function(x) paste0(x, collapse = ","))
+WTO.asymmetric.6dig.hs12 <- WTO %>%
+  select(-hs12.dig.6) %>%
+  unique() %>%
+  left_join(y = converted.hs, by = "id")
+
+saveRDS(WTO.asymmetric.6dig.hs12, file = paste0(path.data.out, "WTO_asymmetric_6dig.hs12.RData"))
+
+## ISIC ----------------
+
+WTO$hs12.dig.6 <- substr(WTO$hs12.dig.6, 1,2)
+
+
+#get proper names, isic chapter and reduce dataframe
+WTO <- merge(WTO, hs.to.isic[, c("hs.code", "chapter")], by.x = "hs12.dig.6", by.y = "hs.code")
+WTO <- WTO %>% 
+  select(-c(hs.chapters, hs12.dig.6, status)) %>%
+  unique()%>%
+  filter(chapter %in% c("A", "D"))
+
+converted.chapter <- unique(aggregate(data = WTO[, c("id", "chapter")],  chapter ~ id , FUN = function(x) paste0(x, collapse = ",")))
+
+WTO <- WTO %>%
+  select(-chapter) %>%
+  unique() %>%
+  left_join(y = converted.chapter, by = "id")
+
+
+
+## Save
+writexl::write_xlsx(WTO, path = paste0(path.data.out, 
+                                          "WTO_asymmetric_isic.xlsx"))
+saveRDS(WTO, file = paste0(path.data.out, 
+                              "WTO_asymmetric_isic.RData"))
+
+rm(countries.iso, hs.to.isic, WTO.to.GTA.names, converted.chapter, WTO, WTO, test, WTO.2, WTO.4, WTO.6, WTO.62)
+
+
+## aggregate 
 WTO$implementing.jurisdiction.backup <- WTO$implementing.jurisdiction
 
 WTO$implementing.jurisdiction <- ifelse(WTO$implementing.jurisdiction < WTO$affected.jurisdiction, 
