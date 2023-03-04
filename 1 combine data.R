@@ -16,5 +16,10 @@ path.data.out <- "1 data processed/"
 # 1. Load data -----------------------------------------------------------------
 # 
 trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
-WTO <- readRDS(file = paste0(path.data.out, "WTO.RData"))
+WTO <- readRDS(file = paste0(path.data.out, "WTO cleaned interventions.RData"))
 TRAINS <- readRDS(file = paste0(path.data.out, "TRAINS cleaned.RData"))
+controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
+
+# 2. combine data (Symmetric) --------------------------------------------------
+
+WTO <- merge(WTO)

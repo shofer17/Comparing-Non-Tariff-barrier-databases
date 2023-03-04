@@ -90,7 +90,7 @@ if(F){
                                           "ISIC chapter codes.xlsx"))
 }
 
-# 3. HS to ISIC conversion -----------------------------------------------------
+# 4. HS to ISIC conversion -----------------------------------------------------
 # write a file to convert 2 digit HS codes to ISIC
 hs.2.dig <- as.character(1:99)
 hs.2.dig <- ifelse(nchar(hs.2.dig) == 1, paste0(0, hs.2.dig), hs.2.dig)
@@ -102,7 +102,7 @@ hs.2.dig.to.isic <- data.frame("hs.code" = hs.2.dig,
 for(i in 1:nrow(hs.2.dig.to.isic)){
   
   codes <-  concord_hs_isic(hs.2.dig.to.isic$hs.code[i], #convert to ISIC
-                            origin = "HS4", 
+                            origin = "HS4", #HS2012
                             destination = "ISIC3", 
                             dest.digit = 2
                             )
@@ -117,8 +117,8 @@ hs.2.dig.to.isic <- hs.2.dig.to.isic[!is.na(hs.2.dig.to.isic$hs.code), ] #only n
 writexl::write_xlsx(hs.2.dig.to.isic, paste0(path.data.out, 
                                              "ISIC to HS 2 digits conversion.xlsx"))
 
-# 4. Consistency of HS Chapters ------------------------------------------------
-# Check if all 2 digit HS chapters have remaind constant over time. 
+# 5. Consistency of HS Chapters ------------------------------------------------
+# Check if all 2 digit HS chapters have remained constant over time. 
 
 if(F){
   links <- data.frame("HS02" = "https://www.wcoomd.org/en/topics/nomenclature/instrument-and-tools/hs_nomenclature_previous_editions/hs_nomenclature_table_2002.aspx",
@@ -150,3 +150,21 @@ if(F){
   #HS code version they are in. As I could not find the HS version the tmdb database used, 
   #I will assume two digit hs codes  given are equal or equivalent to two digit HS4 (2012) codes. 
 }
+
+# 6. HS subchapters ------------------------------------------------------------
+# gta all HS17 codes and add the corresponding HS12 code
+#  all Subchapter to 2 and 4 digit HS codes
+hs.17.to.12 <- readxl::read_xlsx(path = paste0(path.data.raw, "HS2017toHS2012ConversionAndCorrelationTables.xlsx"))
+
+#get hs17 and transform it to usefull format
+hs.17 <- rjson::fromJSON(file = "https://comtrade.un.org/data/cache/classificationH5.json")
+hs.17 <- do.call(rbind.data.frame, hs.17$results)
+hs.17 <- data.frame(hs.17[nchar(hs.17$id) == 6, c("id")])
+names(hs.17) <- "dig.6"
+hs.17$dig.2 <- substr(hs.17$dig.6,1,2)
+hs.17$dig.4 <- substr(hs.17$dig.6,1,4)
+
+hs.17.to.12 <- merge(hs.17, hs.17.to.12, by.x = "dig.6", by.y = "From HS 2017", all.x = T)
+names(hs.17.to.12) <- c("hs17.dig.6","hs17.dig.2","hs17.dig.4", "hs12.dig.6")
+
+saveRDS(hs.17.to.12, file = paste0(path.data.out, "hs.17.to.hs.12.RData"))

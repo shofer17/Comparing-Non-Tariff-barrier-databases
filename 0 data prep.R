@@ -96,12 +96,17 @@ writexl::write_xlsx(trade.costs, path = paste0(path.data.out,
 rm(sheet, trade.costs)
 # 2. TRAINS ------------------------------------------------------------------
 
-## Load
+## Load ---------
+
 TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
+trains <- TRAINS
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
 TRAINS.to.GTA.names <- rbind(TRAINS.to.GTA.names, c("World" ,"World", NA))
-## Clean 
+hs.17.to.hs.12 <- readRDS(file = paste0(path.data.out, "hs.17.to.hs.12.RData"))
+
+
+## Names ------------
 names(TRAINS) <- c("implementing.jurisdiction","affected.jurisdiction",
                    "mast.chapter","description", "product.description",
                    "hs.code", "issuing.agency","regulation.title",
@@ -111,83 +116,134 @@ names(TRAINS) <- c("implementing.jurisdiction","affected.jurisdiction",
                    "supporting/related.regulations","measure.objective",
                    "years.of.data.collection","date.removed")
 
-TRAINS <- TRAINS %>% select(-c(product.description.original.language, 
-                               official.title.original.language, 
+TRAINS <- TRAINS %>% select(-c(official.title.original.language, # For explanation of cases, refer to Chapter 3.2: UNCTAD TRAINS in the Thesis. 
                                `supporting/related.regulations`, 
-                               years.of.data.collection, 
-                               official.regulation.document,
-                               measure.description.original.language,
+                               years.of.data.collection,
                                regulation.symbol,
                                issuing.agency,
-                               measure.objective))
+                               product.description.original.language,    # 1 case
+                               official.regulation.document,             # 1056 cases: e.g. https://trainsdataentry-api.unctad.org/regulations/get-file?fileName=VNM_01_2016_TT-BNNPTNT_VN.doc vs. https://trainsdataentry-api.unctad.org/regulations/get-file?fileName=VNM_01_2016_TT-BNNPTNT_EN.doc
+                               measure.description.original.language,    # 2 cases
+                               measure.objective,                        # 5 cases
+                               #description                               # 1039 cases: e.g. Wood-based packaging materials and packages are subject to heat treatment vs. Wood-based packaging materials and packages shall be specifically stamped
+                               ))
+#test <- TRAINS[duplicated(TRAINS),]
+
+TRAINS <- unique(TRAINS)
 
 
+## Dates ------------
 
 any(is.na(TRAINS$date.removed))
-
 TRAINS$date.implemented[is.na(TRAINS$date.implemented)] <- "1900-01-01" #NAs come from dates before 1900
 TRAINS <- TRAINS %>% 
   mutate(date.removed = as.numeric(year(date.removed)))%>%
   mutate(date.implemented = as.numeric(year(date.implemented)))%>%
-  filter(is.na(date.removed) | date.removed > years[1]) %>%
-  filter(is.na(date.implemented) | date.implemented < max(years))%>%
-  mutate(mast.chapter =  gsub("[0-9]", "", mast.chapter)) %>% #remove MAST subchapters
-  mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T))  #remove HS explenations
+  filter(is.na(date.removed) | date.removed > min(years)) %>%
+  filter(is.na(date.implemented) | date.implemented < max(years)) %>% #remove interventions that are out of range
+  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
+                               max(years),
+                               date.removed)) %>% #set everything to 2019 that is after that or has no removal date
+  mutate(date.implemented = ifelse(date.implemented < min(years), 
+                                   min(years), 
+                                   date.implemented)) #set everything before 2009 to 2009
+
+# get all in force years in a strint
+TRAINS$years.in.force <- apply(TRAINS[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
+TRAINS <- TRAINS %>% select(-c(date.removed, date.implemented))
 
 TRAINS <- TRAINS %>% mutate(measure.id = 1:nrow(TRAINS)) #add unique id
-TRAINS <- unique(cSplit(TRAINS, "hs.code", direction = "long")) #some HS codes are double
-TRAINS$hs.code <- substr(TRAINS$hs.code, 1,2)
-TRAINS <- unique(TRAINS)
 
 
-# Indonesia has Measures affecting HS 98 and 99. They could not be matched to ISIC (see code "96 generate help files.R")
-# Therefore, they are matched manually to chapter C ("Mining and quarrying") in ISIC 3.1. It only affects 10 interventions. 
-hs.to.isic <- rbind(hs.to.isic, c(NA,98,"C"), c(NA,99,"C"))
-
-#get proper names, isic chapter and reduce dataframe
-TRAINS <- merge(TRAINS, hs.to.isic[, c("hs.code", "chapter")], by = "hs.code")
-TRAINS <- TRAINS %>% 
-  select(-c(hs.code, description, product.description, regulation.title)) %>%
-  unique()%>%
-  filter(chapter %in% c("A", "D"))
-
+## Names ---------------------
 
 TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
 TRAINS <- TRAINS %>% 
   mutate(implementing.jurisdiction = GTA.name) %>%
   select(-GTA.name)
 
-TRAINS <- TRAINS %>%
-  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
-                               max(years),
-                               date.removed)) %>% #set everything to 2019 that is above that or has no removal date
-  mutate(date.implemented = ifelse(date.implemented < min(years), 
-                                   min(years), 
-                                   date.implemented)) #set everything before 2009 to 2009
-
-TRAINS$years.in.force <- apply(TRAINS[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
-TRAINS <- TRAINS %>% select(-c(date.removed, date.implemented))
-
-
-# In best case use GTA function to get proper affected countries
-
-
 countries.iso <- country.names[, c("name", "iso_code")]
 countries.iso <- rbind(countries.iso, c("European Union", "EU"))
-
 
 # add ISO codes
 TRAINS <- merge(TRAINS, countries.iso, by.x = "implementing.jurisdiction", by.y = "name")
 names(TRAINS)[ncol(TRAINS)] <- "iso_implementer"
 
+# In best case use GTA function to get proper affected countries
+
+
+## HS codes ------------
+
+TRAINS <- TRAINS %>%
+  #mutate(mast.chapter =  gsub("[0-9]", "", mast.chapter)) %>% #remove MAST subchapters
+  mutate(hs.code =  gsub("\\(.*?\\)", "", hs.code, ignore.case = T)) %>% #remove HS explenations
+  mutate(hs.code =  gsub("\\)", "", hs.code, ignore.case = T)) %>%
+  mutate(hs.code =  gsub("[^0-9,]", "", hs.code, ignore.case = T)) 
+
+
+TRAINS <- unique(cSplit(TRAINS, "hs.code", direction = "long", type.convert = F)) #some HS codes are double
+TRAINS <- TRAINS %>% filter(nchar(hs.code) > 1) #drop empty string and products specified as "0".
+TRAINS$hs.code <- ifelse(nchar(TRAINS$hs.code) > 6, substr(TRAINS$hs.code, 1,6), TRAINS$hs.code) #some are specified in 10 digits
+
+
+#take 2 digit codes, add all 6 digit codes to it, convert to HS2012, and sum it up to one string
+TRAINS.2 <- merge(TRAINS[nchar(TRAINS$hs.code)== 2,], hs.17.to.hs.12[, c("hs17.dig.2", "hs12.dig.6")], by.x = "hs.code", by.y = "hs17.dig.2", all.x = T, allow.cartesian = T)
+TRAINS.4 <- merge(TRAINS[nchar(TRAINS$hs.code)== 4,], hs.17.to.hs.12[, c("hs17.dig.4", "hs12.dig.6")], by.x = "hs.code", by.y = "hs17.dig.4", all.x = T, allow.cartesian = T)
+TRAINS.6 <- merge(TRAINS[nchar(TRAINS$hs.code)== 6,], hs.17.to.hs.12[, c("hs17.dig.6", "hs12.dig.6")], by.x = "hs.code", by.y = "hs17.dig.6", all.x = T, allow.cartesian = T)
+
+TRAINS <- rbind(TRAINS.2, TRAINS.4, TRAINS.6)
+TRAINS <- TRAINS %>%
+  select(-hs.code) %>%
+  unique() #avoid the same HS codes twice
+
+# aggregate all HS codes into a string and save it
+converted.hs <- aggregate(data = TRAINS[, c("measure.id", "hs12.dig.6")],  hs12.dig.6 ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
+TRAINS.asymmetric.6dig.hs12 <- TRAINS %>%
+  select(-hs12.dig.6) %>%
+  unique() %>%
+  left_join(y = converted.hs, by = "measure.id")
+
+## INVESTIGATE LEFTOVERS (possible form HS2012 or smth.)
+test <- TRAINS.asymmetric.6dig.hs12[is.na(TRAINS.asymmetric.6dig.hs12$hs12.dig.6),]
+
+
+saveRDS(TRAINS.asymmetric.6dig.hs12, file = paste0(path.data.out, "TRAINS_asymmetric_6dig.hs12.RData"))
+rm(TRAINS.asymmetric.6dig.hs12, TRAINS.2, TRAINS.4, TRAINS.6, converted.hs)
+
+
+## ISIC -------------
+
+TRAINS$hs.code <- substr(TRAINS$hs12.dig.6, 1,2)
+
+# Indonesia has Measures affecting HS 98 and 99. They could not be matched to ISIC (see code "96 generate help files.R")
+# Therefore, they are matched manually to chapter C ("Mining and quarrying") in ISIC 3. It only affects 10 interventions. 
+hs.to.isic <- rbind(hs.to.isic, c(NA,98,"C"), c(NA,99,"C"))
+
+#get proper names, isic chapter and reduce dataframe
+TRAINS <- merge(TRAINS, hs.to.isic[, c("hs.code", "chapter")], by = "hs.code")
+TRAINS <- TRAINS %>% 
+  select(-c(hs.code, description, product.description, regulation.title, hs12.dig.6)) %>%
+  unique()%>%
+  filter(chapter %in% c("A", "D"))
+
+converted.chapter <- unique(aggregate(data = TRAINS[, c("measure.id", "chapter")],  chapter ~ measure.id , FUN = function(x) paste0(x, collapse = ",")))
+
+TRAINS <- TRAINS %>%
+  select(-chapter) %>%
+  unique() %>%
+  left_join(y = converted.chapter, by = "measure.id")
+
+
 
 ## Save
 writexl::write_xlsx(TRAINS, path = paste0(path.data.out, 
-                                          "TRAINS cleaned.xlsx"))
+                                          "TRAINS_asymmetric_isic.xlsx"))
 saveRDS(TRAINS, file = paste0(path.data.out, 
-                                   "TRAINS cleaned.RData"))
+                                   "TRAINS_asymmetric_isic.RData"))
 
-rm(countries.iso, hs.to.isic, TRAINS.to.GTA.names)
+rm(countries.iso, hs.to.isic, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
+
+
 # 3. WTO TMDB ----------------------------------------------------------------
 
 ## Load
@@ -312,14 +368,28 @@ writexl::write_xlsx(WTO, path = paste0(path.data.out,
 
 saveRDS(WTO, file = paste0(path.data.out, "WTO cleaned interventions.RData"))
 
-# 4. CEPII Gravity control variables ----------------------------------------
+
+# 4. GTA -----------------------------------------------------------------------
+
+
+
+# 5. CEPII Gravity control variables -------------------------------------------
 
 
 # Gravity controls
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
-controls <- controls %>% filter(year %in% years &
-                                country_exists_o&
-                                country_exists_d)
+controls <- controls %>% 
+  filter(year %in% years & country_exists_o & country_exists_d)%>%
+  select(c("year","country_id_o","country_id_d","iso3_o","iso3_d","iso3num_o", 
+           "distw_harmonic_jh","contig","diplo_disagreement","scaled_sci_2021",
+           "comlang_off","comlang_ethno","comcol","comrelig","heg_o","heg_d",
+           "col_dep_ever", "gatt_o","gatt_d","wto_o","wto_d","eu_o","eu_d",
+           "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d")) #check distance measure
+
+
+saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
+
+
 
 # General controls
 # distance.variables <- read_dta(paste0(path.data.raw, 
