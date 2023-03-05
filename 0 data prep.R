@@ -99,7 +99,6 @@ rm(sheet, trade.costs)
 ## Load ---------
 
 TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
-trains <- TRAINS
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
 TRAINS.to.GTA.names <- rbind(TRAINS.to.GTA.names, c("World" ,"World", NA))
@@ -156,6 +155,28 @@ TRAINS <- TRAINS %>% mutate(measure.id = 1:nrow(TRAINS)) #add unique id
 
 
 ## Names ---------------------
+trains <- TRAINS
+
+# clean affected names and move exceptions to separate column
+TRAINS <- TRAINS %>%
+  mutate(exceptions =  gsub(".*(?<=except)", "", affected.jurisdiction, ignore.case = T, perl = T)) %>%
+  mutate(affected.jurisdiction = ifelse(grepl("except", affected.jurisdiction), gsub("(?<=except).*", "", affected.jurisdiction, ignore.case = T, perl = T), affected.jurisdiction)) %>%
+  mutate(exceptions = ifelse(grepl("except", affected.jurisdiction), exceptions, "")) %>%
+  mutate(affected.jurisdiction = gsub("\\(except", "", affected.jurisdiction, perl = T))
+
+TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
+
+world.conversion <- data.frame(TRAINS.to.GTA.names[, c("UNCTAD.name")])
+world.conversion <- world.conversion %>%
+  mutate(affected.jurisdiction = UNCTAD.name) 
+world.conversion.2 <- world.conversion
+world.conversion.2$affected.jurisdiction <- "World "
+world.conversion <- rbind(world.conversion, world.conversion.2)
+world.conversion <- world.conversion[world.conversion$UNCTAD.name != "World",]
+
+
+TRAINS <- merge(TRAINS, world.conversion, by = "affected.jurisdiction", all.x = T, all.y = T)
+
 
 TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
 TRAINS <- TRAINS %>% 
@@ -244,6 +265,19 @@ saveRDS(TRAINS, file = paste0(path.data.out,
 rm(countries.iso, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
 
 
+
+saveRDS(TRAINS, file = paste0(path.data.out, 
+                              "TRAINS_asymmetric_isic.RData"))
+
+## aggregate ------------
+
+TRAINS_asymmetric_isic <- readRDS(file = paste0(path.data.out, "TRAINS_asymmetric_isic.RData"))
+
+
+
+
+
+
 # 3. WTO TMDB ----------------------------------------------------------------
 ## Load -------------
 WTO <- readxl::read_xlsx(path = paste0(path.data.raw, 
@@ -261,16 +295,15 @@ hs.12$hs12.dig.2 <- substr(hs.12$hs12.dig.6, 1,2)
 
 WTO$id <- 1:nrow(WTO)
 
-names(WTO) <- c("implementing.jurisdiction", "date.implemented","MAST.chapter","evaluation",
-                "hs.chapters", "hs.codes","affected.jurisdiction", 
-                "date.removed","measure.description","Source", "status","id" )
-
+names(WTO) <- c("implementing.jurisdiction", "date.implemented","mast.chapter","evaluation",
+                "hs.chapters", "hs.code","affected.jurisdiction", 
+                "date.removed","description","source", "status","measure.id" )
 
 #restrict dataset
 WTO <- WTO %>% 
   filter(evaluation %in% c("Restrictive", "Trade remedy") & #only get restrictive measures
-           !is.na(hs.codes))%>% #only get measures that have product codes
-  select(-c(evaluation, Source, measure.description))
+           !is.na(hs.code))%>% #only get measures that have product codes
+  select(-c(evaluation, source, description))
 
 ## Dates -------------------
 # split trading partners and get partners w. individual termination date
@@ -312,9 +345,6 @@ WTO$years.in.force <- apply(WTO[, c("date.implemented", "date.removed")], 1, FUN
 WTO <- WTO %>% select(-c(date.implemented, date.removed))
 ## Names ---------------
 
-
-#MULTIPLE COUNTRIES!------------------
-
 # add ISO codes
 WTO <- merge(WTO, wto.names.to.iso, by.x = "implementing.jurisdiction", by.y = "Name")
 names(WTO)[ncol(WTO)] <- "ISO_implementing.jurisdiction"
@@ -326,29 +356,30 @@ names(WTO)[ncol(WTO)] <- "ISO_affected.jurisdiction"
 ## HS codes ----------------------
 #go trough all hs products and convert them to ISIC
 
-WTO <- cSplit(WTO, "hs.codes", direction = "long", type.convert = F)
+WTO <- cSplit(WTO, "hs.code", direction = "long", type.convert = F)
 
 #take 2 digit codes, add all 6 digit codes to it, convert to HS2012, and sum it up to one string
-WTO.2 <- merge(WTO[nchar(WTO$hs.codes)== 2,], hs.12[, c("hs12.dig.2", "hs12.dig.6")], by.x = "hs.codes", by.y = "hs12.dig.2", all.x = T, allow.cartesian = T)
-WTO.4 <- merge(WTO[nchar(WTO$hs.codes)== 4,], hs.12[, c("hs12.dig.4", "hs12.dig.6")], by.x = "hs.codes", by.y = "hs12.dig.4", all.x = T, allow.cartesian = T)
-WTO.6 <- data.frame(WTO[nchar(WTO$hs.codes)== 6, "hs.codes"])
+WTO.2 <- merge(WTO[nchar(WTO$hs.code)== 2,], hs.12[, c("hs12.dig.2", "hs12.dig.6")], by.x = "hs.code", by.y = "hs12.dig.2", all.x = T, allow.cartesian = T)
+WTO.4 <- merge(WTO[nchar(WTO$hs.code)== 4,], hs.12[, c("hs12.dig.4", "hs12.dig.6")], by.x = "hs.code", by.y = "hs12.dig.4", all.x = T, allow.cartesian = T)
+WTO.6 <- data.frame(WTO[nchar(WTO$hs.code)== 6, "hs.code"])
 WTO.6$hs12.dig.6 <-  apply(WTO.6 <- WTO.6, 1, FUN = function(x) gta_hs_vintage_converter(x)) # Applying to each row separately that it guesses each code independantly to account for potentially different HS vintages.
-WTO.6 <- cbind(WTO.6, WTO[nchar(WTO$hs.codes)== 6, -"hs.codes"])
+WTO.6 <- cbind(WTO.6, WTO[nchar(WTO$hs.code)== 6, -"hs.code"])
 
 WTO <- rbind(WTO.2, WTO.4, WTO.6)
 WTO$hs12.dig.6 <- as.character(WTO$hs12.dig.6)
 WTO <- WTO %>%
-  select(-hs.codes)%>%
+  select(-hs.code)%>%
   unique()
 
 # aggregate all HS codes into a string and save it
-converted.hs <- aggregate(data = WTO[, c("id", "hs12.dig.6")],  hs12.dig.6 ~ id , FUN = function(x) paste0(x, collapse = ","))
+converted.hs <- aggregate(data = WTO[, c("measure.id", "hs12.dig.6")],  hs12.dig.6 ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
 WTO.asymmetric.6dig.hs12 <- WTO %>%
   select(-hs12.dig.6) %>%
   unique() %>%
-  left_join(y = converted.hs, by = "id")
+  left_join(y = converted.hs, by = "measure.id")
 
 saveRDS(WTO.asymmetric.6dig.hs12, file = paste0(path.data.out, "WTO_asymmetric_6dig.hs12.RData"))
+WTO.asymmetric.6dig.hs12 <- readRDS(file = paste0(path.data.out, "WTO_asymmetric_6dig.hs12.RData"))
 
 ## ISIC ----------------
 
@@ -362,12 +393,12 @@ WTO <- WTO %>%
   unique()%>%
   filter(chapter %in% c("A", "D"))
 
-converted.chapter <- unique(aggregate(data = WTO[, c("id", "chapter")],  chapter ~ id , FUN = function(x) paste0(x, collapse = ",")))
+converted.chapter <- unique(aggregate(data = WTO[, c("measure.id", "chapter")],  chapter ~ measure.id , FUN = function(x) paste0(x, collapse = ",")))
 
 WTO <- WTO %>%
   select(-chapter) %>%
   unique() %>%
-  left_join(y = converted.chapter, by = "id")
+  left_join(y = converted.chapter, by = "measure.id")
 
 
 
@@ -379,8 +410,17 @@ saveRDS(WTO, file = paste0(path.data.out,
 
 rm(countries.iso, hs.to.isic, WTO.to.GTA.names, converted.chapter, WTO, WTO, test, WTO.2, WTO.4, WTO.6, WTO.62)
 
+WTO <- readRDS(paste0(path.data.out, 
+               "WTO_asymmetric_isic.RData"))
 
-## aggregate 
+
+## aggregate ------------
+# use alphabet: sort all implementer-affected pair alphabetically
+# this way, we can aggregate across pairs and get bilateral trade flows
+
+## CHANGE IF POSSIBLE TO INCLUDE ALL MEASURES -------
+WTO <- WTO[!is.na(WTO$affected.jurisdiction) & !is.na(WTO$implementing.jurisdiction),]
+
 WTO$implementing.jurisdiction.backup <- WTO$implementing.jurisdiction
 
 WTO$implementing.jurisdiction <- ifelse(WTO$implementing.jurisdiction < WTO$affected.jurisdiction, 
@@ -391,16 +431,18 @@ WTO$affected.jurisdiction <- ifelse(WTO$affected.jurisdiction > WTO$implementing
                       WTO$implementing.jurisdiction.backup)
 WTO$implementing.jurisdiction.backup <- NULL
 
-WTO <- cSplit(WTO, "ISIC", direction = "long")
+WTO <- cSplit(WTO, "chapter", direction = "long")
 WTO <- cSplit(WTO, "years.in.force", direction = "long")
 
-WTO <- aggregate(data = WTO,id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force, FUN = function(x) length(unique(x)))
+WTO <- unique(WTO)
+
+WTO <- aggregate(data = WTO, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force, FUN = function(x) length(unique(x)))
 names(WTO) <- c("country.1", "country.2", "year", "number.of.interventions")
+
 ## Save
 writexl::write_xlsx(WTO, path = paste0(path.data.out, 
-                                       "WTO cleaned interventions.xlsx"))
-
-saveRDS(WTO, file = paste0(path.data.out, "WTO cleaned interventions.RData"))
+                                       "WTO_symmetric_isic.xlsx"))
+saveRDS(WTO, file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 
 
 # 4. GTA -----------------------------------------------------------------------
