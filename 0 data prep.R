@@ -516,9 +516,106 @@ saveRDS(WTO, file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 
 #WTO <- readRDS(file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 
-# 4. GTA -----------------------------------------------------------------------
+ # 4. GTA -----------------------------------------------------------------------
 
 gta_data_slicer(data.path = paste0(path.data.raw, "master_plus.Rdata"))
+
+GTA <- master.sliced %>% 
+  filter(gta.evaluation != "Green" & !is.na(a.un))%>%
+  select(-c(a.un, i.un, title, date.announced, affected.sector, i.atleastone.G20, a.atleastone.G20))
+
+## Dates ------------------
+GTA$date.implemented[is.na(GTA$date.implemented)] <- "1900-01-01" #NAs come from dates before 1900
+GTA <- GTA %>% 
+  mutate(date.removed = as.numeric(year(date.removed)))%>%
+  mutate(date.implemented = as.numeric(year(date.implemented)))%>%
+  filter(is.na(date.removed) | date.removed > min(years)) %>%
+  filter(is.na(date.implemented) | date.implemented < max(years)) %>% #remove interventions that are out of range
+  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
+                               max(years),
+                               date.removed)) %>% #set everything to 2019 that is after that or has no removal date
+  mutate(date.implemented = ifelse(date.implemented < min(years), 
+                                   min(years), 
+                                   date.implemented)) #set everything before 2009 to 2009
+
+# get all in force years in a strint
+GTA$years.in.force <- apply(GTA[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
+GTA <- GTA %>% select(-c(date.removed, date.implemented))
+
+
+## ISIC --------------------
+
+GTA <- cSplit(GTA, "affected.product", direction = "long")
+GTA$affected.product <- substr(GTA$affected.product, 1,2)
+
+GTA <- unique(GTA)
+# Indonesia has Measures affecting HS 98 and 99. They could not be matched to ISIC (see code "96 generate help files.R")
+# Therefore, they are matched manually to chapter C ("Mining and quarrying") in ISIC 3. It only affects 10 interventions. 
+#hs.to.isic <- rbind(hs.to.isic, c(NA,98,"C"), c(NA,99,"C"))
+
+#get proper names, isic chapter and reduce dataframe
+GTA <- merge(GTA, hs.to.isic[, c("hs.code", "chapter")], 
+             by.x = "affected.product", 
+             by.y = "hs.code")
+
+GTA <- GTA %>% 
+  select(-c(affected.product)) %>%
+  unique()%>%
+  filter(chapter %in% c("A", "D"))
+
+converted.chapter <- unique(aggregate(data = GTA[, c("intervention.id","implementing.jurisdiction", "affected.jurisdiction", "chapter")],  chapter ~ intervention.id + implementing.jurisdiction + affected.jurisdiction, FUN = function(x) paste0(unique(x), collapse = ",")))
+
+GTA <- GTA %>%
+  select(-chapter) %>%
+  unique() %>%
+  left_join(y = converted.chapter, by = c("intervention.id" ,"implementing.jurisdiction", "affected.jurisdiction"))
+
+
+## Save
+writexl::write_xlsx(GTA, path = paste0(path.data.out, 
+                                          "GTA_asymmetric_isic.xlsx"))
+saveRDS(GTA, file = paste0(path.data.out, 
+                              "GTA_asymmetric_isic.RData"))
+
+
+## aggregate --------
+GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
+
+
+GTA$implementing.jurisdiction <- as.character(GTA$implementing.jurisdiction)
+GTA$affected.jurisdiction <- as.character(GTA$affected.jurisdiction)
+GTA$implementing.jurisdiction.backup <- as.character(GTA$implementing.jurisdiction)
+
+GTA$implementing.jurisdiction <- ifelse(as.character(GTA$implementing.jurisdiction) < as.character(GTA$affected.jurisdiction), 
+                                           as.character(GTA$implementing.jurisdiction), 
+                                           as.character(GTA$affected.jurisdiction))
+GTA$affected.jurisdiction <- ifelse(GTA$affected.jurisdiction > GTA$implementing.jurisdiction.backup, 
+                                       GTA$affected.jurisdiction, 
+                                       GTA$implementing.jurisdiction.backup)
+GTA$implementing.jurisdiction.backup <- NULL
+
+
+
+GTA <- cSplit(GTA, "chapter", direction = "long")
+GTA <- unique(GTA)
+
+GTA <- cSplit(GTA, "years.in.force", direction = "long")
+GTA <- unique(GTA)
+
+data.out <- data.frame()
+
+for(i in years){
+  data.loop <- GTA %>% filter(years.in.force == i)
+  
+  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
+  
+  data.out <- rbind(data.out, data.loop)
+}
+
+#GTA <- aggregate(data = GTA, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
+names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.interventions")
+saveRDS(data.out, file = paste0(path.data.out, 
+                                "GTA_symmetric_isic.RData"))
 
 # 5. CEPII Gravity control variables -------------------------------------------
 
