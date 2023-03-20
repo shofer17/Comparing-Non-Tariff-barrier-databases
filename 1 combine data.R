@@ -7,12 +7,13 @@
 setwd("..") # move up one
 
 rm(list = ls())
-install.packages("goft")
-install.packages("fitdistrplus")
+# install.packages("goft")
+# install.packages("fitdistrplus")
 library(goft)
 library(fitdistrplus)
 library(gtalibrary)
 
+options(scipen = 999)
 years <- 2009:2019
 
 # Paths
@@ -50,7 +51,6 @@ names(GTA)[ncol(GTA)] <- "ISO_country.2"
 
 GTA$country.2 <- NULL
 GTA$country.1 <- NULL
-
 
 
 # 2. combine data (Symmetric) --------------------------------------------------
@@ -105,14 +105,14 @@ GTA.sym <- merge(GTA.sym, trade.costs[, c("reporter", "partner", "year", "sector
 
 
 saveRDS(GTA.sym, file = paste0(path.data.out, 
-                                  "TRAINS_symmetric_w_controls.RData"))
+                                  "GTA_symmetric_w_controls.RData"))
 
 saveRDS(TRAINS.sym, file = paste0(path.data.out, 
                                 "TRAINS_symmetric_w_controls.RData"))
 saveRDS(WTO.sym, file = paste0(path.data.out, 
                                 "WTO_symmetric_w_controls.RData"))
 
-# run regressions -----------------
+# 3. run regressions -----------------
 
 ## TRAINS -----------
 TRAINS.sym <- readRDS(file = paste0(path.data.out, 
@@ -137,18 +137,23 @@ summary(linreg)
 
 GTA.sym <- readRDS(file = paste0(path.data.out, 
                                     "GTA_symmetric_w_controls.RData"))
+GTA.sym <- unique(GTA.sym)
 
 GTA.sym <- GTA.sym %>% 
+  select(-scaled_sci_2021) %>%
   filter(chapter == "D")%>%
   mutate(combined.name = paste0(ISO_country.1, ISO_country.2))%>%
-  mutate(help.col = 1)
+  mutate(help.col = ifelse(!is.na(tij), 1,0))
+GTA.sym$tij <- round(as.numeric(GTA.sym$tij),3)
+GTA.sym <- unique(GTA.sym)
+    
 
 to.keep <- aggregate(data = GTA.sym, help.col ~ combined.name, FUN = sum)
 to.keep <- to.keep[to.keep$help.col == 11,]
 
 GTA.sym <- GTA.sym %>%
-  filter(combined.name %in% to.keep$combined.name)
+  filter(combined.name %in% to.keep$combined.name)  
 
 
-linreg <- lm(data = GTA.sym, log(tij) ~ number.of.interventions + diplo_disagreement + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto)
+linreg <- lm(data = GTA.sym, log(tij) ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + gdp.cap.ppp)
 summary(linreg)

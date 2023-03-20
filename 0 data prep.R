@@ -27,6 +27,7 @@ library(lubridate)
 library(splitstackshape)
 library(gtalibrary)
 library(stringr)
+library(tidyverse)
 # old version to avoid memory bug 
 # devtools::install_version("haven", version = "1.1.0") 
 library(haven) #dta files
@@ -39,7 +40,6 @@ years <- 2009:2019
 
 path.data.raw <- "0 data raw/"
 path.data.out <- "1 data processed/"
-
 
 
 
@@ -97,9 +97,8 @@ rm(sheet, trade.costs)
 # 2. TRAINS ------------------------------------------------------------------
 
 ## Load ---------
-
-TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
+TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
 TRAINS.to.GTA.names <- rbind(TRAINS.to.GTA.names, c("World" ,"World", NA))
 hs.17.to.hs.12 <- readRDS(file = paste0(path.data.out, "hs.17.to.hs.12.RData"))
@@ -617,34 +616,156 @@ names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.int
 saveRDS(data.out, file = paste0(path.data.out, 
                                 "GTA_symmetric_isic.RData"))
 
-# 5. CEPII Gravity control variables -------------------------------------------
 
 
-# Gravity controls
+# 5. Define countries ----------------------------------------------------------
+
+#define what countries to use: 
+#all countries that are in all three of the GTA, the TRAINS and the trade costs datasets are used. 
+#as the WTO names are already lined to the GTA names, here it is only checked for overlap of GTA and trade costs
+
+GTA.countries <- country.names$iso_code
+trade.costs <- unique(c(trade.costs$reporter, trade.costs$partner))
+
+available.countries <- intersect(GTA.countries, trade.costs)
+
+# 6. Control variables -------------------------------------------
+rm(list = ls())
+
+years <- 2009:2019
+
+# Paths
+path.data.raw <- "0 data raw/"
+path.data.out <- "1 data processed/"
+
+
+## WB LPI -----------------
+data.out <- data.frame()
+num.sheets <- length(excel_sheets( paste0(path.data.raw, "WB_LPI.xlsx")))
+names.sheets <- excel_sheets( paste0(path.data.raw, "WB_LPI.xlsx"))
+
+for(i in 1:num.sheets){
+  WB.lpi <- readxl::read_xlsx(paste0(path.data.raw, "wb_lpi.xlsx"), skip = 2, sheet = i)
+  
+  WB.lpi <- WB.lpi %>% 
+    select(Code, score...3) %>%
+    mutate(year = names.sheets[i])
+  data.out <- rbind(WB.lpi, data.out)
+
+}
+
+WB.lpi <- pivot_wider(data.out, names_from = "year", values_from = "score...3")
+
+for(i in 2007:max(years)){
+  if(!((i + 1) %in% names(WB.lpi)))
+    eval(parse(text = paste0("WB.lpi <- add_column(WB.lpi, '",i+1,"' = ",NA,", .after = '",i,"')")))
+  
+}
+#if time: make transition smooth, but will prob. not make much of a difference...
+WB.lpi$`2020` <- NULL
+WB.lpi$`2008` <- WB.lpi$`2007`
+WB.lpi$`2009` <- WB.lpi$`2007`
+WB.lpi$`2011` <- WB.lpi$`2010`
+WB.lpi$`2013` <- WB.lpi$`2014`
+WB.lpi$`2015` <- WB.lpi$`2016`
+WB.lpi$`2017` <- WB.lpi$`2018`
+WB.lpi$`2019` <- WB.lpi$`2018`
+
+WB.lpi <- pivot_longer(WB.lpi, cols = 2:ncol(WB.lpi), names_to = "year", values_to = "lpi")
+# t <- apply(data.out, 1, FUN = function(x) na.approx(x[2:(ncol(data.out)-1)]))
+# t <- data.frame(t)
+# library(zoo)
+rm(names.sheets, num.sheets, data.out,i)
+
+## WB GDP cap ppp ------
+WB.gdp.cap.ppp <- read.csv(paste0(path.data.raw, "WB_GDP_cap_ppp.csv"))
+WB.gdp.cap.ppp <- WB.gdp.cap.ppp[, c(2, 5:ncol(WB.gdp.cap.ppp))]
+names(WB.gdp.cap.ppp) <- c("ISO", 2007:2021)
+WB.gdp.cap.ppp <- pivot_longer(WB.gdp.cap.ppp, cols = 2:ncol(WB.gdp.cap.ppp), names_to = "year", values_to = "gdp.cap.ppp")
+WB.gdp.cap.ppp$gdp.cap.ppp <- as.numeric(WB.gdp.cap.ppp$gdp.cap.ppp)
+
+## UNCTAD Liner shipping index ---------------
+TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
+UNCTAD.LSCI <- read.csv(paste0(path.data.raw, "UNCTAD_LSCI.csv"), skip = 2)
+UNCTAD.LSCI <- UNCTAD.LSCI[-1,]
+UNCTAD.LSCI[, 2:ncol(UNCTAD.LSCI)] <- apply(UNCTAD.LSCI[, 2:ncol(UNCTAD.LSCI)],2, FUN = as.numeric)
+UNCTAD.LSCI <- pivot_longer(UNCTAD.LSCI, cols = 2:ncol(UNCTAD.LSCI), names_to = "year_quarter", values_to = "LSI")
+UNCTAD.LSCI$year <- substr(UNCTAD.LSCI$year_quarter, 4,8)
+UNCTAD.LSCI <- aggregate(LSI ~ year + QUARTER, UNCTAD.LSCI, mean)
+
+t <- expand.grid(years, TRAINS.to.GTA.names$GTA.name)
+names(t) <- c("year", "GTA.name")
+TRAINS.to.GTA.names <- merge(TRAINS.to.GTA.names, t, by = "GTA.name")
+UNCTAD.LSCI <- merge(UNCTAD.LSCI, TRAINS.to.GTA.names, by.x = c("QUARTER", "year"), by.y = c("UNCTAD.name", "year"), all.y = T)
+UNCTAD.LSCI$LSI <- ifelse(is.na(UNCTAD.LSCI$LSI), 0, UNCTAD.LSCI$LSI) # the shipping index is Na for landlocked countries, therefore set to 0
+
+UNCTAD.LSCI$QUARTER <- NULL
+UNCTAD.LSCI$un_code <- NULL
+
+iso.conversion <- rbind(country.names[, c("name", "iso_code")], c("EU", "EU"))
+UNCTAD.LSCI <- merge(UNCTAD.LSCI, iso.conversion[, c("name", "iso_code")], by.x = "GTA.name", by.y = "name", all.x = T)
+UNCTAD.LSCI$GTA.name <- NULL
+
+
+rm(t)
+
+## CEPII Gravity controls ------------------------------------------------------
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
+CEPII.landlocked <- cepiigeodist::geo_cepii[, c("iso3", "landlocked")] ## Landlocked
+
+# reduce controls
 controls <- controls %>% 
   filter(year %in% years & country_exists_o & country_exists_d)%>%
   select(c("year","country_id_o","country_id_d","iso3_o","iso3_d","iso3num_o", 
            "distw_harmonic","contig","diplo_disagreement","scaled_sci_2021",
            "comlang_off","comlang_ethno","comcol","comrelig","heg_o","heg_d",
            "col_dep_ever", "gatt_o","gatt_d","wto_o","wto_d","eu_o","eu_d",
-           "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d", "gdp_o", "gdp_d")) #check distance measure
+           "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d", "gdp_o", "gdp_d", 
+           "gdpcap_ppp_o", "gdpcap_ppp_d", "entry_cost_o", "entry_cost_d", "dist"))%>% #check distance measure
+
+# WB.lpi
+names(WB.lpi) <- c("iso3_o", "year", "lpi_o")
+controls <- merge(controls, WB.lpi, by = c("iso3_o", "year"), all.x = T)
+names(WB.lpi) <- c("iso3_d", "year", "lpi_d")
+controls <- merge(controls, WB.lpi, by = c("iso3_d", "year"), all.x = T)
+
+
+# WB.gdp.cap.ppp
+names(WB.gdp.cap.ppp) <- c("iso3_o", "year", "gdp.cap.ppp_o")
+controls <- merge(controls, WB.gdp.cap.ppp, by = c("iso3_o", "year"), all.x = T)
+names(WB.gdp.cap.ppp) <- c("iso3_d", "year", "gdp.cap.ppp_d")
+controls <- merge(controls, WB.gdp.cap.ppp, by = c("iso3_d", "year"), all.x = T)
+
+# UNCTAD LSCI
+names(UNCTAD.LSCI) <- c("year", "lsci_o","iso3_o") ###CHECK FOR COLLINEARITY WITH LANDLOCKED
+controls <- merge(controls, UNCTAD.LSCI, by = c("iso3_o", "year"), all.x = T)
+names(UNCTAD.LSCI) <- c("year", "lsci_d","iso3_d")
+controls <- merge(controls, UNCTAD.LSCI, by = c("iso3_d", "year"), all.x = T)
+
+# Landlocked
+names(CEPII.landlocked) <- c("iso3_o", "landlocked_o")
+controls <- merge(controls, CEPII.landlocked, by = c("iso3_o"), all.x = T)
+names(CEPII.landlocked) <- c("iso3_d", "landlocked_d")
+controls <- merge(controls, CEPII.landlocked, by = c("iso3_d"), all.x = T)
+
+
+#only get necessary controlls
+controls <- controls %>% 
+  filter(iso3_d %in% available.countries & 
+           iso3_o %in% available.countries) %>%
+  filter(substr(country_id_o, nchar(country_id_o), nchar(country_id_o)) != 1 & #old countries have missing values
+           substr(country_id_d, nchar(country_id_d), nchar(country_id_d)) != 1 
+           )
+
+#make controlls bilateral
+controls$landlocked <- ifelse(controls$landlocked_d == 1 | 
+                                controls$landlocked_o == 1,1,0)
+
+controls$gdp.cap.ppp <- apply(controls[ , c("gdp.cap.ppp_d", "gdp.cap.ppp_o")], 1, FUN = function(x) exp(mean(log(x))))
+controls$lsci <- apply(controls[ , c("lsci_d", "lsci_o")], 1, FUN = function(x) exp(mean(log(x))))
+controls$lpi <- apply(controls[ , c("lpi_d", "lpi_o")], 1, FUN = function(x) exp(mean(log(x))))
+
+controls <- controls %>% select(-c(landlocked_o, landlocked_d, gdp.cap.ppp_d, gdpcap_ppp_o, lsci_o, lsci_d, lpi_d, lpi_o))
 
 
 saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
-
-
-
-# General controls
-# distance.variables <- read_dta(paste0(path.data.raw, 
-#                                       "CEPII_Distance_Variables.dta"))
-# 
-# geo.variables <- read_dta(paste0(path.data.raw, 
-#                                       "CEPII_Geo_Variables.dta"))
-
-
-
-
-
-
-
