@@ -135,6 +135,9 @@ summary(linreg)
 
 ## GTA -------------------
 
+cutoff <- readxl::read_xlsx(paste0(path.data.out, "GTA NTM coverage.xlsx"))
+cutoff <- cutoff %>% filter(coverage.measure.log > 0)
+
 GTA.sym <- readRDS(file = paste0(path.data.out, 
                                     "GTA_symmetric_w_controls.RData"))
 GTA.sym <- unique(GTA.sym)
@@ -142,6 +145,7 @@ GTA.sym <- unique(GTA.sym)
 GTA.sym <- GTA.sym %>% 
   select(-scaled_sci_2021) %>%
   filter(chapter == "D")%>%
+  #filter(ISO_country.1 %in% cutoff$iso_code & ISO_country.2 %in% cutoff$iso_code) %>%
   mutate(combined.name = paste0(ISO_country.1, ISO_country.2))%>%
   mutate(help.col = ifelse(!is.na(tij), 1,0))
 GTA.sym$tij <- round(as.numeric(GTA.sym$tij),3)
@@ -152,8 +156,28 @@ to.keep <- aggregate(data = GTA.sym, help.col ~ combined.name, FUN = sum)
 to.keep <- to.keep[to.keep$help.col == 11,]
 
 GTA.sym <- GTA.sym %>%
-  filter(combined.name %in% to.keep$combined.name)  
+  filter(combined.name %in% to.keep$combined.name)
+
+cutoff.merge <- cutoff[, c("iso_code", "coverage.measure.log")]
+names(cutoff.merge) <- c("ISO_country.1", "coverage.1")
+GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "ISO_country.1")
+names(cutoff.merge) <- c("ISO_country.2", "coverage.2")
+GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "ISO_country.2")
+GTA.sym$coverage <- apply(GTA.sym[, c("coverage.1", "coverage.2")], 1, FUN = function(x) exp(mean(log(x))))
 
 
-linreg <- lm(data = GTA.sym, log(tij) ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + gdp.cap.ppp)
+
+saveRDS(GTA.sym, file = paste0(path.data.out, "GTA_symmetric_w_controls_reg.RData"))
+GTA.sym <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls_reg.RData"))
+
+## ADD TARIFFS
+linreg <- lm(data = GTA.sym, log(tij) ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + log(gdp.cap.ppp) + )
 summary(linreg)
+
+# TRY TRADE COVERAGES
+
+
+
+
+# DO REG WITH REDUCED DATA
+

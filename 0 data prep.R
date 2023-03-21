@@ -722,13 +722,13 @@ controls <- controls %>%
            "col_dep_ever", "gatt_o","gatt_d","wto_o","wto_d","eu_o","eu_d",
            "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d", "gdp_o", "gdp_d", 
            "gdpcap_ppp_o", "gdpcap_ppp_d", "entry_cost_o", "entry_cost_d", "dist"))%>% #check distance measure
+  filter(iso3_d != iso3_o)
 
 # WB.lpi
 names(WB.lpi) <- c("iso3_o", "year", "lpi_o")
 controls <- merge(controls, WB.lpi, by = c("iso3_o", "year"), all.x = T)
 names(WB.lpi) <- c("iso3_d", "year", "lpi_d")
 controls <- merge(controls, WB.lpi, by = c("iso3_d", "year"), all.x = T)
-
 
 # WB.gdp.cap.ppp
 names(WB.gdp.cap.ppp) <- c("iso3_o", "year", "gdp.cap.ppp_o")
