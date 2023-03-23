@@ -41,6 +41,25 @@ years <- 2009:2019
 path.data.raw <- "0 data raw/"
 path.data.out <- "1 data processed/"
 
+# 0. function ------------------------------------------------------------------
+
+to_iso <- function(data, column.name.1, column.name.2){ # from GTA name to ISO
+  
+  iso.conversion <- rbind(country.names[, c("name", "iso_code")], c("EU", "EU"))
+  
+  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.1,"', by.y = 'name', all.x = T)")))
+  names(data)[ncol(data)] <- "ISO_country.1"
+  
+  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.2,"', by.y = 'name', all.x = T)")))
+  names(data)[ncol(data)] <- "ISO_country.2"
+  
+  data <- data[, 3:ncol(data)]
+  names(data)[(ncol(data)-1):ncol(data)] <- c(column.name.1, column.name.2)
+  
+  return(data)
+}
+
+
 
 
 # 1. UN ESCAP (Trade Costs) ----------------------------------------------------
@@ -56,6 +75,7 @@ for(i in sheets){ # takes a while
   
   trade.costs    <- rbind(trade.costs, sheet)
   
+  return(data)
 }
 
 
@@ -97,18 +117,12 @@ rm(sheet, trade.costs)
 # 2. TRAINS ------------------------------------------------------------------
 
 ## Load ---------
+selected.mast <- read.csv(file = paste0(path.data.out, "selected MAST chapters.xlsx"))
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
 TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
 TRAINS.to.GTA.names <- rbind(TRAINS.to.GTA.names, c("World" ,"World", NA))
 hs.17.to.hs.12 <- readRDS(file = paste0(path.data.out, "hs.17.to.hs.12.RData"))
-
-
-#get P6 interventions
-export.subsidies <- TRAINS %>% 
-  filter(NTM.code == "P6") %>% 
-  select(c(Country.imposing.NTM.s., NTM.code, Partner.affected.by.NTM.s., Measure.description, Regulation.title, Measure.objective)) 
-writexl::write_xlsx(export.subsidies, path = paste0(path.data.raw, "TRAINS P6.xlsx"))
 
 ## Names ------------
 names(TRAINS) <- c("implementing.jurisdiction","affected.jurisdiction",
@@ -134,7 +148,9 @@ TRAINS <- TRAINS %>% select(-c(official.title.original.language, # For explanati
 #test <- TRAINS[duplicated(TRAINS),]
 
 TRAINS <- unique(TRAINS)
-
+TRAINS <- TRAINS %>% 
+  mutate(NTM.code = substr(NTM.code, 1,1)) %>%
+  filter(NTM.code %in% selected.mast$x)
 
 ## Dates ------------
 
@@ -209,7 +225,7 @@ TRAINS <- TRAINS %>%
   unique() %>%
   left_join(y = converted.affected, by = "measure.id")
 
-# 
+
 # countries.iso <- country.names[, c("name", "iso_code")]
 # countries.iso <- rbind(countries.iso, c("European Union", "EU"))
 # 
@@ -407,6 +423,7 @@ WTO$date.removed <- ifelse(is.na(WTO$date.removed) |
 
 WTO$years.in.force <- apply(WTO[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
 WTO <- WTO %>% select(-c(date.implemented, date.removed))
+
 ## HS codes ----------------------
 #go trough all hs products and convert them to ISIC
 
@@ -425,12 +442,15 @@ WTO <- WTO %>%
   select(-hs.code)%>%
   unique()
 
+
+
 # aggregate all HS codes into a string and save it
 converted.hs <- aggregate(data = WTO[, c("measure.id", "hs12.dig.6")],  hs12.dig.6 ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
 WTO.asymmetric.6dig.hs12 <- WTO %>%
   select(-hs12.dig.6) %>%
   unique() %>%
   left_join(y = converted.hs, by = "measure.id")
+
 
 saveRDS(WTO.asymmetric.6dig.hs12, file = paste0(path.data.out, "WTO_asymmetric_6dig.hs12.RData"))
 WTO.asymmetric.6dig.hs12 <- readRDS(file = paste0(path.data.out, "WTO_asymmetric_6dig.hs12.RData"))
@@ -521,6 +541,8 @@ gta_data_slicer(data.path = paste0(path.data.raw, "master_plus.Rdata"))
 
 GTA <- master.sliced %>% 
   filter(gta.evaluation != "Green" & !is.na(a.un))%>%
+  mutate(mast.chapter = as.character(mast.chapter))%>%
+  filter(mast.chapter %in% selected.mast$x) %>%
   select(-c(a.un, i.un, title, date.announced, affected.sector, i.atleastone.G20, a.atleastone.G20))
 
 ## Dates ------------------
@@ -560,7 +582,7 @@ GTA <- merge(GTA, hs.to.isic[, c("hs.code", "chapter")],
 GTA <- GTA %>% 
   select(-c(affected.product)) %>%
   unique()%>%
-  filter(chapter %in% c("A", "D"))
+  filter(chapter %in% c("A","B", "D"))
 
 converted.chapter <- unique(aggregate(data = GTA[, c("intervention.id","implementing.jurisdiction", "affected.jurisdiction", "chapter")],  chapter ~ intervention.id + implementing.jurisdiction + affected.jurisdiction, FUN = function(x) paste0(unique(x), collapse = ",")))
 
@@ -618,16 +640,10 @@ saveRDS(data.out, file = paste0(path.data.out,
 
 
 
-# 5. Define countries ----------------------------------------------------------
 
-#define what countries to use: 
-#all countries that are in all three of the GTA, the TRAINS and the trade costs datasets are used. 
-#as the WTO names are already lined to the GTA names, here it is only checked for overlap of GTA and trade costs
 
-GTA.countries <- country.names$iso_code
-trade.costs <- unique(c(trade.costs$reporter, trade.costs$partner))
 
-available.countries <- intersect(GTA.countries, trade.costs)
+
 
 # 6. Control variables -------------------------------------------
 rm(list = ls())
