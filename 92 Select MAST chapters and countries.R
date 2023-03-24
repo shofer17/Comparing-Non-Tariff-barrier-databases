@@ -25,7 +25,7 @@ write.csv(selected.mast, file = paste0(path.data.out, "selected MAST chapters.cs
 #countries that are in all three of the GTA, the TRAINS and the trade costs datasets are used. 
 
 GTA.countries <- country.names$iso_code
-trade.costs <- unique(c(trade.costs$reporter, trade.costs$partner))
+trade.costs <- unique(c(trade.costs$country.1, trade.costs$country.2))
 TRAINS.countries <- unique(c(TRAINS_ISO$country.1, TRAINS_ISO$country.2))
 WTO.countries <- unique(c(WTO_ISO$ISO_country.1, WTO_ISO$ISO_country.2))
 

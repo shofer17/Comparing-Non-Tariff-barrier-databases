@@ -125,7 +125,8 @@ TRAINS <- TRAINS %>%
   mutate(date.removed = as.numeric(year(date.removed)))%>%
   mutate(date.implemented = as.numeric(year(date.implemented)))%>%
   filter(is.na(date.removed) | date.removed > min(years)) %>%
-  filter(is.na(date.implemented) | date.implemented < max(years)) %>% #remove interventions that are out of range
+  filter(!date.implemented < min(years)) %>%
+  filter(is.na(date.implemented) | date.implemented <= max(years)) %>% #remove interventions that are out of range
   mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
                                max(years),
                                date.removed)) %>% #set everything to 2019 that is after that or has no removal date
@@ -230,6 +231,7 @@ TRAINS.asymmetric.6dig.hs12 <- TRAINS %>%
 
 ## INVESTIGATE LEFTOVERS (possible form HS2012 or smth.)
 test <- TRAINS.asymmetric.6dig.hs12[is.na(TRAINS.asymmetric.6dig.hs12$hs12.dig.6),]
+
 
 
 saveRDS(TRAINS.asymmetric.6dig.hs12, file = paste0(path.data.out, "TRAINS_asymmetric_6dig.hs12.RData"))
