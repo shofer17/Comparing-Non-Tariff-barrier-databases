@@ -1,7 +1,7 @@
 rm(list = ls())
 
-path.data.raw <- "0 data raw/"
-path.data.out <- "1 data processed/"
+path.data.raw <- "1 data/0 data raw/"
+path.data.out <- "1 data/1 data processed/"
 
 
 TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
@@ -18,7 +18,7 @@ mast.gta <- sort(as.character(unique(master.sliced$mast.chapter)))
 
 selected.mast <- intersect(mast.gta, mast.trains)
 
-write.csv(selected.mast, file = paste0(path.data.out, "selected MAST chapters.xlsx"))
+write.csv(selected.mast, file = paste0(path.data.out, "selected MAST chapters.csv"), row.names = F)
 
 # 2. Countries ---------------------------------
 #define what countries to use: 
@@ -34,4 +34,6 @@ available.countries <- intersect(GTA.countries, trade.costs)
 available.countries <- intersect(available.countries, TRAINS.countries)
 available.countries <- intersect(available.countries, WTO.countries)
 
-write.csv(available.countries, file = paste0(path.data.out, "selected countries.xlsx"))
+available.countries <- available.countries[!available.countries %in% c("NLD", "BEL", "SGP")] # drop these three bc. they were also excluded in Arvis because of issues with reimports (p.467)
+
+write.csv(available.countries, file = paste0(path.data.out, "selected countries.csv"), row.names = F)

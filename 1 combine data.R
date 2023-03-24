@@ -17,46 +17,19 @@ library(sampleSelection)
 library(tidyverse)
 
 options(scipen = 999)
-years <- 2009:2019
-
-# Paths
-
-path.data.raw <- "0 data raw/"
-path.data.out <- "1 data processed/"
-
-# 0. function ------------------------------------------------------------------
-
-to_iso <- function(data, column.name.1, column.name.2){ # from GTA name to ISO
-  
-  iso.conversion <- rbind(country.names[, c("name", "iso_code")], c("EU", "EU"))
-  
-  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.1,"', by.y = 'name', all.x = T)")))
-  names(data)[ncol(data)] <- "ISO_country.1"
-  
-  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.2,"', by.y = 'name', all.x = T)")))
-  names(data)[ncol(data)] <- "ISO_country.2"
-  
-  data <- data[, 3:ncol(data)]
-  names(data)[(ncol(data)-1):ncol(data)] <- c(column.name.1, column.name.2)
-  
-  return(data)
-}
-
+source("BA_Thesis_code/00 Terms and Definitions.R")
 
 
 
 
 # 1. Load data -----------------------------------------------------------------
-# 
+
 trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
 WTO.sym <- readRDS(file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 TRAINS.sym <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_isic.RData"))
 GTA.sym <- readRDS(file = paste0(path.data.out, "GTA_symmetric_isic.RData"))
-controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
-
-
-TRAINS.sym <- to_iso(TRAINS.sym, "country.1", "country.2")
-GTA.sym <- to_iso(GTA.sym, "country.1", "country.2")
+#controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
+controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
 
 # 2. combine data (Symmetric) --------------------------------------------------
 
@@ -70,9 +43,9 @@ WTO.sym <- merge(WTO.sym, controls,
 
 
 trade.costs$is.cost <- 1
-WTO.sym <- merge(WTO.sym, trade.costs[, c("reporter", "partner", "year", "sector", "tij", "is.cost")], 
+WTO.sym <- merge(WTO.sym, trade.costs[, c("country.1", "country.2", "year", "chapter", "tij", "is.cost")], 
                     by.x = c("ISO_country.1", "ISO_country.2", "year", "chapter"),
-                    by.y = c("reporter", "partner", "year", "sector"), 
+                    by.y = c("country.1", "country.2", "year", "chapter"), 
                     all.x = T)
 
 any(!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter))
@@ -86,35 +59,26 @@ descdist(test, discrete = F)
 
 ## TRAINS -------------
 TRAINS.sym <- merge(TRAINS.sym, controls,
-                 by.x = c("country.1", "country.2", "year"), 
-                 by.y = c("country_id_o", "country_id_d", "year"), 
+                 by = c("country.1", "country.2", "year", "chapter"), 
                  all.x = T)
 
-TRAINS.sym$chapter <- as.character(TRAINS.sym$chapter)
-TRAINS.sym$chapter <- ifelse(TRAINS.sym$chapter == "A", "AB", TRAINS.sym$chapter)
 
 trade.costs$is.cost <- 1
-TRAINS.sym <- merge(TRAINS.sym, trade.costs[, c("reporter", "partner", "year", "sector", "tij", "is.cost")], 
-                    by.x = c("country.1", "country.2", "year", "chapter"),
-                    by.y = c("reporter", "partner", "year", "sector"), 
+TRAINS.sym <- merge(TRAINS.sym, trade.costs, 
+                    by = c("country.1", "country.2", "year", "chapter"),
                     all.x = T)
 
 
 ##GTA ------------
 
 GTA.sym <- merge(GTA.sym, controls,
-                    by.x = c("country.1", "country.2", "year"), 
-                    by.y = c("country_id_o", "country_id_d", "year"), 
+                    by = c("country.1", "country.2", "year", "chapter"), 
                     all.x = T)
-
-GTA.sym$chapter <- as.character(GTA.sym$chapter)
-GTA.sym$chapter <- ifelse(GTA.sym$chapter == "A", "AB", GTA.sym$chapter)
 
 trade.costs$is.cost <- 1
-GTA.sym <- merge(GTA.sym, trade.costs[, c("reporter", "partner", "year", "sector", "tij","geometric_avg_tariff", "is.cost")], 
-                    by.x = c("country.1", "country.2", "year", "chapter"),
-                    by.y = c("reporter", "partner", "year", "sector"), 
-                    all.x = T)
+GTA.sym <- merge(GTA.sym, trade.costs, 
+                 by = c("country.1", "country.2", "year", "chapter"),
+                 all.x = T)
 
 
 
@@ -134,14 +98,7 @@ TRAINS.sym <- readRDS(file = paste0(path.data.out,
 
 TRAINS.sym <- TRAINS.sym %>% 
   filter(chapter == "D")%>%
-  mutate(combined.name = paste0(ISO_country.1, ISO_country.2))%>%
-  mutate(help.col = 1)
-
-to.keep <- aggregate(data = TRAINS.sym, help.col ~ combined.name, FUN = sum)
-to.keep <- to.keep[to.keep$help.col == 11,]
-
-TRAINS.sym <- TRAINS.sym %>%
-  filter(combined.name %in% to.keep$combined.name)
+  mutate(combined.name = paste0(country.1, country.2))
 
 
 linreg <- lm(data = TRAINS.sym, log(tij) ~ number.of.interventions + diplo_disagreement + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto)
@@ -198,15 +155,8 @@ GTA.sym$gdp <- apply(GTA.sym[, c("gdp_o", "gdp_d")], 1, FUN = function(x) mean(x
 
 library(sampleSelection)
 heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
-                 log(tij) ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp)+ coverage,
+                 tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp)+ coverage,
                  method = "2step",
                  data = GTA.sym)
 
 summary(heckit)
-
-
-
-
-
-# DO REG WITH REDUCED DATA
-

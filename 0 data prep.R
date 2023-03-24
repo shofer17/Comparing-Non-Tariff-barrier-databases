@@ -9,14 +9,9 @@
 # 2. Countries are specified by 3-digits ISO codes. 
 # 3. All measures are classified as liberalising or restrictive
 # 4. Country-MAST chapter combinations will be aggregared to get number of interventions per combination
-# 
 
 
-setwd("..") # move up one
-rm(list = ls())
-#install.packages("gsubfn")
-#install.packages("remotes")
-#remotes::install_github("insongkim/concordance")
+# Libraries
 library(concordance)
 library(gsubfn)
 library(readxl)
@@ -32,39 +27,17 @@ library(tidyverse)
 # devtools::install_version("haven", version = "1.1.0") 
 library(haven) #dta files
 
-# Parameters
 
-years <- 2009:2019
+setwd("..") # move up one (out of the code file)
 
-# Paths
-
-path.data.raw <- "0 data raw/"
-path.data.out <- "1 data processed/"
-
-# 0. function ------------------------------------------------------------------
-
-to_iso <- function(data, column.name.1, column.name.2){ # from GTA name to ISO
-  
-  iso.conversion <- rbind(country.names[, c("name", "iso_code")], c("EU", "EU"))
-  
-  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.1,"', by.y = 'name', all.x = T)")))
-  names(data)[ncol(data)] <- "ISO_country.1"
-  
-  eval(parse(text = paste0("data <- merge(data, iso.conversion, by.x = '",column.name.2,"', by.y = 'name', all.x = T)")))
-  names(data)[ncol(data)] <- "ISO_country.2"
-  
-  data <- data[, 3:ncol(data)]
-  names(data)[(ncol(data)-1):ncol(data)] <- c(column.name.1, column.name.2)
-  
-  return(data)
-}
-
+rm(list = ls())
+source("BA_Thesis_code/00 Terms and Definitions.R")
 
 
 
 # 1. UN ESCAP (Trade Costs) ----------------------------------------------------
 
-## Load 
+## Load  -----------------------------------------------------------------------
 sheets <- c("AB", "D", "GTT") # Sector: ISIC rev.3
 trade.costs <- data.frame()
 
@@ -74,54 +47,46 @@ for(i in sheets){ # takes a while
                      sheet = i)
   
   trade.costs    <- rbind(trade.costs, sheet)
-  
-  return(data)
 }
 
 
-## Clean
-
-trade.costs <- trade.costs %>% filter(year >= min(years) & year <= max(years)) %>%
+## Clean -----------------------------------------------------------------------
+#TRADE COST TO GRID
+trade.costs <- trade.costs %>% 
+  filter(year >= min(years) & year <= max(years)) %>%
+  filter(reporter %in% selected.countries & partner %in% selected.countries) %>%
   select(-c(reportername, partnername, sectorname))
 
-#DROP HALF SAMPLE TO AVOID REPETITON (tariffs are bidirectional, so each tariff shows up twice)
-#To compute efficiently, sort all ISO codes per row alphabetically and apply unique()
-trade.costs$reporter.backup <- trade.costs$reporter
+#rounding is unlikely to affect results
+trade.costs$tij <- round(as.numeric(trade.costs$tij),3) #round from 4 to 3 digits after comma to avoid double counting values (unique() does not work otherwise)
+trade.costs$geometric_avg_tariff <- round(as.numeric(trade.costs$geometric_avg_tariff),5) #round from 6 to 5 digits after comma to avoid double counting values (unique() does not work otherwise)
+trade.costs$nontariff_tij <- round(as.numeric(trade.costs$nontariff_tij),3) #round from 4 to 3 digits after comma to avoid double counting values (unique() does not work otherwise)
 
-trade.costs$reporter <- ifelse(trade.costs$reporter < trade.costs$partner, 
-                               trade.costs$reporter, 
-                               trade.costs$partner)
-trade.costs$partner <- ifelse(trade.costs$partner > trade.costs$reporter.backup, 
-                              trade.costs$partner, 
-                              trade.costs$reporter.backup)
+#Drop half sample (tariffs are bidirectional, each obs. shows up twice, ij and ji)
+trade.costs <- unique(to_alphabeta(trade.costs, "reporter", "partner"))
 
-trade.costs <- trade.costs %>%
-  select(-reporter.backup) %>%
-  unique()
+names(trade.costs) <- c("country.1", "country.2", "year", "chapter", "tij", "geometric_avg_tariff", "nontariff_tij")
 
-# trade.costs[trade.costs == ".."] <- NA #.. denotes no value, change to NA
-# names(trade.costs) <- gsub("\\[(.*)\\]","", names(trade.costs), perl = T)
-# trade.costs <- pivot_longer(trade.costs, 
-#                             7:ncol(trade.costs), 
-#                             names_to  = "year", 
-#                             values_to = "tij")
 
-# Save
-saveRDS(trade.costs, file = paste0(path.data.out, 
-                                   "Trade Costs Processed.RData"))
+nrow(trade.costs) == nrow(grid)
 
-writexl::write_xlsx(trade.costs, path = paste0(path.data.out, 
-                                          "Trade Costs Processed.xlsx"))
+## Save -------------------------------------------------------------------------
+saveRDS(trade.costs, file = paste0(path.data.out, "Trade Costs Processed.RData"))
 
-rm(sheet, trade.costs)
+writexl::write_xlsx(trade.costs, path = paste0(path.data.out, "Trade Costs Processed.xlsx"))
+
+rm(sheet, trade.costs, sheets)
+
 # 2. TRAINS ------------------------------------------------------------------
 
 ## Load ---------
-selected.mast <- read.csv(file = paste0(path.data.out, "selected MAST chapters.xlsx"))
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
 TRAINS <- read.csv(paste0(path.data.raw, "UNCTAD_TRAINS_database.csv"))
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
 TRAINS.to.GTA.names <- rbind(TRAINS.to.GTA.names, c("World" ,"World", NA))
+TRAINS.to.GTA.names <- TRAINS.to.GTA.names %>% 
+  left_join(country.names[, c("name", "iso_code")], by = join_by(GTA.name == name)) %>%
+  filter(iso_code %in% selected.countries)
 hs.17.to.hs.12 <- readRDS(file = paste0(path.data.out, "hs.17.to.hs.12.RData"))
 
 ## Names ------------
@@ -149,8 +114,8 @@ TRAINS <- TRAINS %>% select(-c(official.title.original.language, # For explanati
 
 TRAINS <- unique(TRAINS)
 TRAINS <- TRAINS %>% 
-  mutate(NTM.code = substr(NTM.code, 1,1)) %>%
-  filter(NTM.code %in% selected.mast$x)
+  mutate(mast.chapter = substr(mast.chapter, 1,1)) %>%
+  filter(mast.chapter %in% selected.mast)
 
 ## Dates ------------
 
@@ -168,7 +133,7 @@ TRAINS <- TRAINS %>%
                                    min(years), 
                                    date.implemented)) #set everything before 2009 to 2009
 
-# get all in force years in a strint
+# get all in force years in a string
 TRAINS$years.in.force <- apply(TRAINS[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
 TRAINS <- TRAINS %>% select(-c(date.removed, date.implemented))
 
@@ -185,7 +150,10 @@ TRAINS <- TRAINS %>%
   mutate(exceptions = ifelse(grepl("except", affected.jurisdiction), exceptions, "")) %>%
   mutate(affected.jurisdiction = gsub(" \\(except", "", affected.jurisdiction, perl = T))
 
+
 TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
+
+
 
 world.conversion <- data.frame(TRAINS.to.GTA.names[, c("UNCTAD.name")])
 world.conversion <- world.conversion %>%
@@ -208,10 +176,11 @@ TRAINS <- TRAINS[TRAINS$implementing.jurisdiction != TRAINS$affected.jurisdictio
 # TRAINS <- TRAINS[TRAINS$affected.jurisdiction != TRAINS$exceptions,]
 TRAINS$exceptions <- NULL
 
-TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
+TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name", "iso_code")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
 TRAINS <- TRAINS %>% 
   mutate(implementing.jurisdiction = GTA.name) %>%
-  select(-GTA.name)
+  select(-GTA.name) %>% 
+  filter(iso_code %in% selected.countries)
 
 TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "affected.jurisdiction", by.y = "UNCTAD.name", all.x = T)
 TRAINS <- TRAINS %>% 
@@ -224,19 +193,6 @@ TRAINS <- TRAINS %>%
   select(-affected.jurisdiction) %>%
   unique() %>%
   left_join(y = converted.affected, by = "measure.id")
-
-
-# countries.iso <- country.names[, c("name", "iso_code")]
-# countries.iso <- rbind(countries.iso, c("European Union", "EU"))
-# 
-# # add ISO codes
-# TRAINS <- merge(TRAINS, countries.iso, by.x = "implementing.jurisdiction", by.y = "name")
-# names(TRAINS)[ncol(TRAINS)] <- "iso_implementer"
-# 
-# TRAINS <- merge(TRAINS, countries.iso, by.x = "affected.jurisdiction", by.y = "name")
-# names(TRAINS)[ncol(TRAINS)] <- "iso_affected"
-
-
 
 # In best case use GTA function to get proper affected countries
 
@@ -293,7 +249,8 @@ TRAINS <- merge(TRAINS, hs.to.isic[, c("hs.code", "chapter")], by = "hs.code")
 TRAINS <- TRAINS %>% 
   select(-c(hs.code, description, product.description, regulation.title, hs12.dig.6)) %>%
   unique()%>%
-  filter(chapter %in% c("A", "D"))
+  filter(chapter %in% c("A","B", "D"))
+TRAINS$chapter <- ifelse(TRAINS$chapter == "A", "AB", TRAINS$chapter)
 
 converted.chapter <- unique(aggregate(data = TRAINS[, c("measure.id", "chapter")],  chapter ~ measure.id , FUN = function(x) paste0(x, collapse = ",")))
 
@@ -303,14 +260,13 @@ TRAINS <- TRAINS %>%
   left_join(y = converted.chapter, by = "measure.id")
 
 
-
 ## Save
 writexl::write_xlsx(TRAINS, path = paste0(path.data.out, 
                                           "TRAINS_asymmetric_isic.xlsx"))
 saveRDS(TRAINS, file = paste0(path.data.out, 
                                    "TRAINS_asymmetric_isic.RData"))
 
-rm(countries.iso, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
+rm(TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test, world.conversion, world.conversion.2, converted.affected)
 
 
 
@@ -321,30 +277,16 @@ rm(countries.iso, TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test)
 TRAINS <- readRDS(file = paste0(path.data.out, "TRAINS_asymmetric_isic.RData"))
 
 TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
+TRAINS$iso_code <- NULL
+TRAINS <- to_iso(TRAINS, "implementing.jurisdiction", "affected.jurisdiction")
+TRAINS <- to_alphabeta(TRAINS, "implementing.jurisdiction", "affected.jurisdiction")
 
-TRAINS$implementing.jurisdiction <- as.character(TRAINS$implementing.jurisdiction)
-TRAINS$affected.jurisdiction <- as.character(TRAINS$affected.jurisdiction)
-TRAINS$implementing.jurisdiction.backup <- as.character(TRAINS$implementing.jurisdiction)
-
-TRAINS$implementing.jurisdiction <- ifelse(as.character(TRAINS$implementing.jurisdiction) < as.character(TRAINS$affected.jurisdiction), 
-                                        as.character(TRAINS$implementing.jurisdiction), 
-                                        as.character(TRAINS$affected.jurisdiction))
-TRAINS$affected.jurisdiction <- ifelse(TRAINS$affected.jurisdiction > TRAINS$implementing.jurisdiction.backup, 
-                                       TRAINS$affected.jurisdiction, 
-                                       TRAINS$implementing.jurisdiction.backup)
-TRAINS$implementing.jurisdiction.backup <- NULL
-
-
-
-TRAINS <- cSplit(TRAINS, "chapter", direction = "long")
-TRAINS <- unique(TRAINS)
-
-TRAINS <- cSplit(TRAINS, "years.in.force", direction = "long")
-TRAINS <- unique(TRAINS)
+TRAINS <- unique(cSplit(TRAINS, "chapter", direction = "long"))
+TRAINS <- unique(cSplit(TRAINS, "years.in.force", direction = "long"))
 
 data.out <- data.frame()
 
-for(i in years){
+for(i in years){ #aggregate by year to ease computational burden
   data.loop <- TRAINS %>% filter(years.in.force == i)
   
   data.loop <- aggregate(data = data.loop, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
@@ -354,10 +296,24 @@ for(i in years){
 
 #TRAINS <- aggregate(data = TRAINS, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
 names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.interventions")
+data.out$chapter <- ifelse(data.out$chapter == "A", "AB", data.out$chapter)
+data.out <- pivot_wider(data.out, id_cols = 1:3, names_from = "chapter", values_from = "number.of.interventions")
+data.out$GTT <- data.out$AB + data.out$D
+data.out <- pivot_longer(data.out, cols = 4:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+
+# add pairs with 0 interventions associated
+grid$chapter <- as.character(grid$chapter)
+# test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
+# nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
+data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
+data.out$number.of.interventions <- ifelse(is.na(data.out$number.of.interventions), 0,data.out$number.of.interventions)
+
+
 saveRDS(data.out, file = paste0(path.data.out, 
                               "TRAINS_symmetric_isic.RData"))
 
 
+rm(TRAINS, data.loop, data.out)
 # 3. WTO TMDB ----------------------------------------------------------------
 ## Load -------------
 WTO <- readxl::read_xlsx(path = paste0(path.data.raw, 
@@ -542,9 +498,11 @@ gta_data_slicer(data.path = paste0(path.data.raw, "master_plus.Rdata"))
 GTA <- master.sliced %>% 
   filter(gta.evaluation != "Green" & !is.na(a.un))%>%
   mutate(mast.chapter = as.character(mast.chapter))%>%
-  filter(mast.chapter %in% selected.mast$x) %>%
+  filter(mast.chapter %in% selected.mast) %>%
   select(-c(a.un, i.un, title, date.announced, affected.sector, i.atleastone.G20, a.atleastone.G20))
 
+GTA <- to_iso(GTA, "implementing.jurisdiction", "affected.jurisdiction")
+GTA <- GTA %>% filter(implementing.jurisdiction %in% selected.countries & affected.jurisdiction %in% selected.countries)
 ## Dates ------------------
 GTA$date.implemented[is.na(GTA$date.implemented)] <- "1900-01-01" #NAs come from dates before 1900
 GTA <- GTA %>% 
@@ -579,10 +537,12 @@ GTA <- merge(GTA, hs.to.isic[, c("hs.code", "chapter")],
              by.x = "affected.product", 
              by.y = "hs.code")
 
+GTA$chapter <- ifelse(GTA$chapter %in% c("A", "B"), "AB", GTA$chapter)
+
 GTA <- GTA %>% 
   select(-c(affected.product)) %>%
   unique()%>%
-  filter(chapter %in% c("A","B", "D"))
+  filter(chapter %in% c("AB","D"))
 
 converted.chapter <- unique(aggregate(data = GTA[, c("intervention.id","implementing.jurisdiction", "affected.jurisdiction", "chapter")],  chapter ~ intervention.id + implementing.jurisdiction + affected.jurisdiction, FUN = function(x) paste0(unique(x), collapse = ",")))
 
@@ -602,26 +562,11 @@ saveRDS(GTA, file = paste0(path.data.out,
 ## aggregate --------
 GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
 
-
-GTA$implementing.jurisdiction <- as.character(GTA$implementing.jurisdiction)
-GTA$affected.jurisdiction <- as.character(GTA$affected.jurisdiction)
-GTA$implementing.jurisdiction.backup <- as.character(GTA$implementing.jurisdiction)
-
-GTA$implementing.jurisdiction <- ifelse(as.character(GTA$implementing.jurisdiction) < as.character(GTA$affected.jurisdiction), 
-                                           as.character(GTA$implementing.jurisdiction), 
-                                           as.character(GTA$affected.jurisdiction))
-GTA$affected.jurisdiction <- ifelse(GTA$affected.jurisdiction > GTA$implementing.jurisdiction.backup, 
-                                       GTA$affected.jurisdiction, 
-                                       GTA$implementing.jurisdiction.backup)
-GTA$implementing.jurisdiction.backup <- NULL
+GTA <- to_alphabeta(GTA, "implementing.jurisdiction", "affected.jurisdiction")
 
 
-
-GTA <- cSplit(GTA, "chapter", direction = "long")
-GTA <- unique(GTA)
-
-GTA <- cSplit(GTA, "years.in.force", direction = "long")
-GTA <- unique(GTA)
+GTA <- unique(cSplit(GTA, "chapter", direction = "long"))
+GTA <- unique(cSplit(GTA, "years.in.force", direction = "long"))
 
 data.out <- data.frame()
 
@@ -633,8 +578,20 @@ for(i in years){
   data.out <- rbind(data.out, data.loop)
 }
 
-#GTA <- aggregate(data = GTA, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
 names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.interventions")
+
+data.out <- pivot_wider(data.out, id_cols = 1:3, names_from = "chapter", values_from = "number.of.interventions")
+data.out$GTT <- data.out$AB + data.out$D
+data.out <- pivot_longer(data.out, cols = 4:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+
+# test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
+# nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
+# add pairs with 0 interventions associated
+data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T)
+data.out$number.of.interventions <- ifelse(is.na(data.out$number.of.interventions), 0,data.out$number.of.interventions)
+
+
+
 saveRDS(data.out, file = paste0(path.data.out, 
                                 "GTA_symmetric_isic.RData"))
 
@@ -647,15 +604,11 @@ saveRDS(data.out, file = paste0(path.data.out,
 
 # 6. Control variables -------------------------------------------
 rm(list = ls())
+source("BA_Thesis_code/00 Terms and Definitions.R")
 
-years <- 2009:2019
-
-# Paths
-path.data.raw <- "0 data raw/"
-path.data.out <- "1 data processed/"
-
-
-## WB LPI -----------------
+library(imputeTS)
+library(cepiigeodist)
+## WB LPI ----------------------------------------------------------------------
 data.out <- data.frame()
 num.sheets <- length(excel_sheets( paste0(path.data.raw, "WB_LPI.xlsx")))
 names.sheets <- excel_sheets( paste0(path.data.raw, "WB_LPI.xlsx"))
@@ -677,6 +630,10 @@ for(i in 2007:max(years)){
     eval(parse(text = paste0("WB.lpi <- add_column(WB.lpi, '",i+1,"' = ",NA,", .after = '",i,"')")))
   
 }
+
+# WB.lpi[,2:ncol(WB.lpi)] <- apply(WB.lpi[,2:ncol(WB.lpi)], 2, FUN = as.numeric)
+# test <- apply(WB.lpi[,2:ncol(WB.lpi)], 1, FUN = function(x) na_interpolation(x))
+
 #if time: make transition smooth, but will prob. not make much of a difference...
 WB.lpi$`2020` <- NULL
 WB.lpi$`2008` <- WB.lpi$`2007`
@@ -688,16 +645,27 @@ WB.lpi$`2017` <- WB.lpi$`2018`
 WB.lpi$`2019` <- WB.lpi$`2018`
 
 WB.lpi <- pivot_longer(WB.lpi, cols = 2:ncol(WB.lpi), names_to = "year", values_to = "lpi")
+
+WB.lpi <- WB.lpi %>% 
+  filter(Code %in% selected.countries) %>%
+  filter(year %in% years)
+
 # t <- apply(data.out, 1, FUN = function(x) na.approx(x[2:(ncol(data.out)-1)]))
 # t <- data.frame(t)
 # library(zoo)
+
+names(WB.lpi) <- c("country.1", "year", "lpi")
 rm(names.sheets, num.sheets, data.out,i)
 
-## WB GDP cap ppp ------
+## WB GDP cap ppp --------------------------------------------------------------
 WB.gdp.cap.ppp <- read.csv(paste0(path.data.raw, "WB_GDP_cap_ppp.csv"))
 WB.gdp.cap.ppp <- WB.gdp.cap.ppp[, c(2, 5:ncol(WB.gdp.cap.ppp))]
 names(WB.gdp.cap.ppp) <- c("ISO", 2007:2021)
 WB.gdp.cap.ppp <- pivot_longer(WB.gdp.cap.ppp, cols = 2:ncol(WB.gdp.cap.ppp), names_to = "year", values_to = "gdp.cap.ppp")
+
+WB.gdp.cap.ppp <- WB.gdp.cap.ppp %>% 
+  filter(ISO %in% selected.countries) %>%
+  filter(year %in% years)
 WB.gdp.cap.ppp$gdp.cap.ppp <- as.numeric(WB.gdp.cap.ppp$gdp.cap.ppp)
 
 ## UNCTAD Liner shipping index ---------------
@@ -723,7 +691,7 @@ UNCTAD.LSCI <- merge(UNCTAD.LSCI, iso.conversion[, c("name", "iso_code")], by.x 
 UNCTAD.LSCI$GTA.name <- NULL
 
 
-rm(t)
+rm(t, TRAINS.to.GTA.names)
 
 ## CEPII Gravity controls ------------------------------------------------------
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
@@ -737,8 +705,10 @@ controls <- controls %>%
            "comlang_off","comlang_ethno","comcol","comrelig","heg_o","heg_d",
            "col_dep_ever", "gatt_o","gatt_d","wto_o","wto_d","eu_o","eu_d",
            "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d", "gdp_o", "gdp_d", 
-           "gdpcap_ppp_o", "gdpcap_ppp_d", "entry_cost_o", "entry_cost_d", "dist"))%>% #check distance measure
-  filter(iso3_d != iso3_o)
+           "gdpcap_ppp_o", "gdpcap_ppp_d", "entry_cost_o", "entry_cost_d", "dist")) %>%#check distance measure
+  filter(iso3_d != iso3_o) %>%
+  filter(iso3_o %in% selected.countries & iso3_d %in% selected.countries)
+  
 
 # WB.lpi
 names(WB.lpi) <- c("iso3_o", "year", "lpi_o")
@@ -767,8 +737,6 @@ controls <- merge(controls, CEPII.landlocked, by = c("iso3_d"), all.x = T)
 
 #only get necessary controlls
 controls <- controls %>% 
-  filter(iso3_d %in% available.countries & 
-           iso3_o %in% available.countries) %>%
   filter(substr(country_id_o, nchar(country_id_o), nchar(country_id_o)) != 1 & #old countries have missing values
            substr(country_id_d, nchar(country_id_d), nchar(country_id_d)) != 1 
            )
@@ -782,6 +750,15 @@ controls$lsci <- apply(controls[ , c("lsci_d", "lsci_o")], 1, FUN = function(x) 
 controls$lpi <- apply(controls[ , c("lpi_d", "lpi_o")], 1, FUN = function(x) exp(mean(log(x))))
 
 controls <- controls %>% select(-c(landlocked_o, landlocked_d, gdp.cap.ppp_d, gdpcap_ppp_o, lsci_o, lsci_d, lpi_d, lpi_o))
-
-
 saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
+
+controls <- controls %>% select(iso3_d, iso3_o, year, distw_harmonic, contig, diplo_disagreement, comlang_ethno, comlang_off, comcol, comrelig, fta_wto, dist, gdp.cap.ppp, landlocked, lsci, lpi)
+controls <- unique(to_alphabeta(controls, "iso3_d", "iso3_o"))
+
+controls <- merge(grid, controls, by.x = c("country.1", "country.2", "year"), by.y = c("iso3_d", "iso3_o", "year"))
+saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
+
+
+
+
+
