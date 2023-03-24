@@ -1,3 +1,5 @@
+install.package("sqldf")
+
 CREATE DEFINER=`gta_prod_master`@`%` TRIGGER `before_intervention_update` BEFORE UPDATE ON `gta_intervention` FOR EACH ROW BEGIN
   SET @intervention_id = NEW.id;
   SET @intervention_area = NEW.intervention_area;
