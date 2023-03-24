@@ -176,10 +176,10 @@ GTA.sym <- GTA.sym %>%
   filter(combined.name %in% to.keep$combined.name)
 
 cutoff.merge <- cutoff[, c("iso_code", "coverage.measure.log")]
-names(cutoff.merge) <- c("ISO_country.1", "coverage.1")
-GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "ISO_country.1")
-names(cutoff.merge) <- c("ISO_country.2", "coverage.2")
-GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "ISO_country.2")
+names(cutoff.merge) <- c("country.1", "coverage.1")
+GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "country.1")
+names(cutoff.merge) <- c("country.2", "coverage.2")
+GTA.sym <- merge(GTA.sym, cutoff.merge, by.x = "country.2")
 GTA.sym$coverage <- apply(GTA.sym[, c("coverage.1", "coverage.2")], 1, FUN = function(x) exp(mean(log(x))))
 
 
@@ -188,7 +188,7 @@ saveRDS(GTA.sym, file = paste0(path.data.out, "GTA_symmetric_w_controls_reg.RDat
 GTA.sym <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls_reg.RData"))
 
 ## ADD TARIFFS
-linreg <- lm(data = GTA.sym, log(tij) ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + log(gdp.cap.ppp) + geometric_avg_tariff)
+linreg <- lm(data = GTA.sym, tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage)
 summary(linreg)
 
 
@@ -196,8 +196,9 @@ summary(linreg)
 GTA.sym$is.available <- ifelse(is.na(GTA.sym$tij), 0, 1)
 GTA.sym$gdp <- apply(GTA.sym[, c("gdp_o", "gdp_d")], 1, FUN = function(x) mean(x))
 
-heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked + log(gdp), 
-                 tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff,
+library(sampleSelection)
+heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
+                 log(tij) ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp)+ coverage,
                  method = "2step",
                  data = GTA.sym)
 

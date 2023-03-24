@@ -47,11 +47,19 @@ library(gtalibrary)
 
 
 data.out <- data.frame(matrix(nrow = nrow(GTA.sym), ncol = 3 + length(years)))
-data.out[,1:2] <- GTA.sym[,3:4]
 names(data.out) <- c("country.1", "country.2","Number of interventions affecting exported product" , paste0("Trade coverage estimate for ", years))
+data.out$country.1 <- GTA.sym$country.1
+data.out$country.2 <- GTA.sym$country.2
+
+
+
+readRDS(file = paste0(path.data.out, "GTA_symmetric_isic_coverage_d.Rds"))
+trade.coverage.estimates <- 0
+
+
 
 t_0 <- Sys.time()
-for (i in 1: nrow(GTA.sym)){
+for (i in 1: nrow(GTA.sym)){ #run until 133
   
   gta_trade_coverage(data.path = paste0(path.data.raw, "master_plus.Rdata"),
                      replica.path = paste0(path.data.raw, "database replica - parts - base.Rdata"),
