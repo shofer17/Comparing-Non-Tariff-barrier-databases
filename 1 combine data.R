@@ -160,3 +160,6 @@ heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi 
                  data = GTA.sym)
 
 summary(heckit)
+detach("package:goft")
+detach("package:fitdistrplus")
+detach("package:MASS")
