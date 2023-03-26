@@ -9,12 +9,7 @@ detach("package:systemfit", unload=TRUE)
 detach("package:MASS", unload=TRUE)
 
 setwd("..") 
-years <- 2009:2019
-
-# Paths
-
-path.data.raw <- "0 data raw/"
-path.data.out <- "1 data processed/"
+source("BA_Thesis_code/00 Terms and Definitions.R")
 
 GTA.sym <- readRDS(file = paste0(path.data.out, "GTA_symmetric_isic.RData"))
 hs.to.isic <- readxl::read_xlsx(paste0(path.data.out, "ISIC to HS 2 digits conversion.xlsx"))
@@ -53,13 +48,13 @@ data.out$country.2 <- GTA.sym$country.2
 
 
 
-readRDS(file = paste0(path.data.out, "GTA_symmetric_isic_coverage_d.Rds"))
+data.out <- readRDS(file = paste0(path.data.out, "GTA_symmetric_isic_coverage_d.Rds"))
 trade.coverage.estimates <- 0
 
 
 
 t_0 <- Sys.time()
-for (i in 1: nrow(GTA.sym)){ #run until 133
+for (i in 130: nrow(data.out)){ #run until 133
   
   gta_trade_coverage(data.path = paste0(path.data.raw, "master_plus.Rdata"),
                      replica.path = paste0(path.data.raw, "database replica - parts - base.Rdata"),

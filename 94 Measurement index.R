@@ -69,7 +69,7 @@ TRAINS$measure.id <- ifelse(is.na(TRAINS$measure.id), 0, TRAINS$measure.id)
 GTA$coverage.measure <- GTA$intervention.id / log(GTA$gdp_o )
 TRAINS$coverage.measure <- TRAINS$measure.id / log(TRAINS$gdp_o)
 
-GTA <- GTA %>% select(-c(intervention.id, gdp_o))
+GTA <- GTA %>% select(-c(gdp_o))
 TRAINS <- TRAINS %>% select(-c(measure.id, gdp_o))
 
 
@@ -81,7 +81,12 @@ GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter"),
 
 GTA$coverage.geom.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
 GTA$coverage.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) mean(x))
-GTA <- GTA %>% select(-c(coverage.measure.x, coverage.measure.y))
+GTA$intervention.geom.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) exp(mean(log(x))))
+GTA$intervention.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) mean(x))
+
+
+
+GTA <- GTA %>% select(-c(coverage.measure.x, coverage.measure.y, intervention.id.x, intervention.id.y))
 
 help <- merge(grid, TRAINS, by.x = c("country.1", "year", "chapter"), 
               by.y = c("implementing.jurisdiction", "years.in.force", "chapter"), all.x = T)
