@@ -54,7 +54,7 @@ trade.coverage.estimates <- 0
 
 
 t_0 <- Sys.time()
-for (i in 130: nrow(data.out)){ #run until 133
+for (i in 460: nrow(data.out)){ #run until 133
   
   gta_trade_coverage(data.path = paste0(path.data.raw, "master_plus.Rdata"),
                      replica.path = paste0(path.data.raw, "database replica - parts - base.Rdata"),

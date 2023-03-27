@@ -114,6 +114,7 @@ TRAINS <- TRAINS %>% select(-c(official.title.original.language, # For explanati
 
 TRAINS <- unique(TRAINS)
 TRAINS <- TRAINS %>% 
+  mutate(mast.subchapter = mast.chapter)%>%
   mutate(mast.chapter = substr(mast.chapter, 1,1)) %>%
   filter(mast.chapter %in% selected.mast)
 
@@ -153,7 +154,7 @@ TRAINS <- TRAINS %>%
 
 
 TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
-
+TRAINS$is.world <- ifelse(TRAINS$affected.jurisdiction == "World", 1, 0)
 
 
 world.conversion <- data.frame(TRAINS.to.GTA.names[, c("UNCTAD.name")])
