@@ -51,6 +51,11 @@ data.out$country.2 <- GTA.sym$country.2
 data.out <- readRDS(file = paste0(path.data.out, "GTA_symmetric_isic_coverage_d.Rds"))
 trade.coverage.estimates <- 0
 
+hs <- readxl::read_xlsx(paste0(path.data.raw, "GTA - Sectors and Products.xlsx"))
+hs.to.isic <- hs.to.isic %>% filter(chapter == "D")
+hs <- hs %>% filter(`Sector level 2 ID` %in% hs.to.isic$hs.code) %>%
+  select(`Product level 6 ID`)
+hs <- hs$`Product level 6 ID`
 
 
 t_0 <- Sys.time()

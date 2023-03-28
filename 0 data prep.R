@@ -145,6 +145,7 @@ TRAINS <- TRAINS %>% mutate(measure.id = 1:nrow(TRAINS)) #add unique id
 ## Names ---------------------
 trains <- TRAINS
 TRAINS <- trains
+
 # clean affected names and move exceptions to separate column
 TRAINS <- TRAINS %>%
   mutate(exceptions =  gsub(".*(?<=except)", "", affected.jurisdiction, ignore.case = T, perl = T)) %>%
@@ -152,45 +153,79 @@ TRAINS <- TRAINS %>%
   mutate(exceptions = ifelse(grepl("except", affected.jurisdiction), exceptions, "")) %>%
   mutate(affected.jurisdiction = gsub(" \\(except", "", affected.jurisdiction, perl = T))
 
-
-TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
-TRAINS$is.world <- ifelse(TRAINS$affected.jurisdiction == "World", 1, 0)
-
-
-world.conversion <- data.frame(TRAINS.to.GTA.names[, c("UNCTAD.name")])
-world.conversion <- world.conversion %>%
-  mutate(affected.jurisdiction = UNCTAD.name) 
-world.conversion.2 <- world.conversion
-world.conversion.2$affected.jurisdiction <- "World"
-world.conversion <- rbind(world.conversion, world.conversion.2)
-world.conversion <- world.conversion[world.conversion$UNCTAD.name != "World",]
-
-TRAINS <- merge(TRAINS, world.conversion, by = "affected.jurisdiction", all.x = T, all.y = T, allow.cartesian = T)
-TRAINS$affected.jurisdiction <- NULL
-names(TRAINS)[ncol(TRAINS)] <- "affected.jurisdiction"
-
-TRAINS <- TRAINS[TRAINS$implementing.jurisdiction != TRAINS$affected.jurisdiction,]
-
-# DO ISSUES WITH BRACKETS MACEDONIA (depending if actually need fixing or can use GTA code to get affecteed jurisdictions)
-# ALSO FIX EXCEPTION, currently dealy bc. it might not even be necessary
-# TRAINS$exceptions <- gsub("\\(|\\)", "", TRAINS$exceptions)
-# TRAINS <- cSplit(TRAINS, "exceptions", direction = "wide")
-# TRAINS <- TRAINS[TRAINS$affected.jurisdiction != TRAINS$exceptions,]
-TRAINS$exceptions <- NULL
-
-TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name", "iso_code")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name", all.x = T)
+# add GTA names to implementer
+TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name", "iso_code")], by.x = "implementing.jurisdiction", by.y = "UNCTAD.name")
 TRAINS <- TRAINS %>% 
   mutate(implementing.jurisdiction = GTA.name) %>%
   select(-GTA.name) %>% 
   filter(iso_code %in% selected.countries)
 
-TRAINS <- merge(TRAINS, TRAINS.to.GTA.names[, c("UNCTAD.name", "GTA.name")], by.x = "affected.jurisdiction", by.y = "UNCTAD.name", all.x = T)
-TRAINS <- TRAINS %>% 
-  mutate(affected.jurisdiction = GTA.name) %>%
-  select(-GTA.name)
+#get single affected and remove world affected
+TRAINS <- cSplit(TRAINS, "affected.jurisdiction", direction = "long")
+TRAINS$is.world <- ifelse(TRAINS$affected.jurisdiction == "World", 1, 0)
+TRAINS.non.world <- TRAINS %>% filter(is.world == 0)
+TRAINS.non.world <- unique(TRAINS.non.world$measure.id)
+
+TRAINS$is.world <- ifelse(TRAINS$affected.jurisdiction == "World" & 
+                            !TRAINS$measure.id %in% TRAINS.non.world,
+                          1,0)
+TRAINS$exceptions <- NULL
+
+# remove world to merge GTA names
+TRAINS.world <- TRAINS %>% filter(is.world == 1)
+TRAINS.non.world <- TRAINS %>% 
+  filter(is.world == 0) %>% 
+  filter(affected.jurisdiction != "World") #remove World where already other countries affected
 
 
-converted.affected <- aggregate(data = TRAINS[, c("measure.id", "affected.jurisdiction")],  affected.jurisdiction ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
+# The affected countries have a different format. So, ISO codes are looked up for the using GPT 4 (w.Bing). 
+translate.affected <- read.csv(file = paste0(path.data.raw, "UNCTAD_affected_to_iso.csv"), encoding = "Latin-1")
+translate.affected$Index <- NULL
+names(translate.affected)[2] <- "ISO_affected"
+
+#Add Eu countries
+eu <- country.names[country.names$is.eu, c("iso_code", "name")]
+eu <- eu %>% filter(name != "United Kingdom") %>%
+  mutate("EU" = "EU")%>%
+  rename("ISO_EU" = "iso_code")
+
+#deal with special characters
+TRAINS.non.world$affected.jurisdiction[TRAINS.non.world$affected.jurisdiction == "Türkiye"] <- "Turkiye"
+TRAINS.non.world$affected.jurisdiction[TRAINS.non.world$affected.jurisdiction == "Turkey"] <- "Turkiye"
+TRAINS.non.world$affected.jurisdiction[TRAINS.non.world$affected.jurisdiction == "Côte d'Ivoire"] <- "Cote d'Ivoire"
+TRAINS.non.world$affected.jurisdiction[TRAINS.non.world$affected.jurisdiction == "Réunion"] <- "Reunion"
+TRAINS.non.world$affected.jurisdiction[TRAINS.non.world$affected.jurisdiction == "Curaçao"] <- "Curacao"
+
+#convert to iso
+TRAINS.non.world <- merge(TRAINS.non.world, translate.affected,
+                          by.x = "affected.jurisdiction", 
+                          by.y = "Country")
+
+TRAINS.non.world <- TRAINS.non.world %>% 
+  filter(!is.na(ISO_affected))
+
+#add eu
+TRAINS.non.world <- merge(TRAINS.non.world, eu, by.x = "ISO_affected", by.y = "EU", all.x = T, allow.cartesian = T)
+TRAINS.non.world <- TRAINS.non.world %>% 
+  left_join(eu, by = c("ISO_affected" = "EU", multiple = "all"))
+
+names(TRAINS.non.world)
+TRAINS.non.world$ISO_affected <- ifelse(TRAINS.non.world$ISO_affected == "EU", TRAINS.non.world$ISO_EU, TRAINS.non.world$ISO_affected)
+TRAINS.non.world <- TRAINS.non.world %>% 
+  select(-c(name, ISO_EU)) %>%
+  filter(ISO_affected %in% selected.countries)%>%
+  left_join(country.names[, c("name", "iso_code")], by = c("ISO_affected", "iso_code"))
+
+
+rm(eu, translate.affected)
+
+TRAINS.world$ISO_affected <- NA
+
+test <- rbind(TRAINS.world, TRAINS.non.world)
+
+
+
+converted.affected <- aggregate(data = TRAINS[, c("measure.id", "ISO_affected")],  ISO_affected ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
 TRAINS <- TRAINS %>%
   select(-affected.jurisdiction) %>%
   unique() %>%
