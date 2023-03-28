@@ -27,7 +27,7 @@ TRAINS.reduced <- TRAINS %>%
   #if world and other countries are added as affected, only use specific countries
 nrow(TRAINS.rest) + nrow(TRAINS.reduced) == nrow(TRAINS)
 
-mast.flow.conversion <- data.frame("mast.chapter" = c("B", "C", "D", "E", "F", "G", "I", "L", "M","N", "P"
+mast.flow.conversion <- data.frame("mast.chapter" = c("B", "C", "D", "E", "F", "G", "I", "L", "M","N", "P" # See UNCTAD TRAINS MAST classification guide p. 11, 2021 version
                                                       #,"P3", "P6","P9"
                                                       ),
                                    "affected.flow" = c("inward", "inward", "inward", "inward", "inward", "inward", "inward", "inward", "inward", "inward", "outward" #,"outward", "outward subsidy","outward subsidy
@@ -42,7 +42,7 @@ TRAINS.reduced <- TRAINS.reduced %>% select(intervention_id, implementing_jurisd
 TRAINS.reduced$inception.date <- sapply(strsplit(TRAINS.reduced$years.in.force, split = ","), FUN = min)
 
 # INWARD ---------------------------------
-rm(gta_affected_jurisdiction, gta_affected_sector, gta_affected_tariff_line, gta_distorted_market, gta_it_revised)
+rm(gta_affected_jurisdiction, gta_affected_sector, gta_affected_tariff_line, gta_distorted_market)
 
 TRAINS.inward <- TRAINS.reduced %>% 
   filter(affected.flow == "inward") %>%
@@ -82,35 +82,10 @@ TRAINS.outward <- TRAINS.outward %>%
 TRAINS.outward <- aggregate(data = TRAINS.outward,`Reporter.jurisdiction`  ~ intervention_id , FUN = function(x) paste0(x, collapse = ","))
 names(TRAINS.outward) <- c("measure.id", "affected.jurisdiction")
 
-# OUTWARD Subsidy ---------------------------------
-
-
-TRAINS.outward.subsidy <- TRAINS %>% filter(mast.subchapter == "P6")
-
-
-TRAINS.outward <- TRAINS.reduced %>% 
-  filter(affected.flow == "outward") %>%
-  select(-c(years.in.force, iso_code)) %>%
-  mutate(inception.date = as.numeric(inception.date)-1) %>% 
-  cSplit("hs12.dig.6", sep = ",", direction = "long") %>%
-  left_join(gta_support_goods_trade[, c("Year", "Tariff.line", "Partner.jurisdiction", "Reporter.jurisdiction")], 
-            by = c("inception.date" = "Year", "hs12.dig.6" = "Tariff.line", "implementing_jurisdiction" = "Partner.jurisdiction"), 
-            multiple = "all")
-
-TRAINS.outward <- TRAINS.outward %>% 
-  filter(!is.na(Reporter.jurisdiction)) %>%
-  select(-c(hs12.dig.6, inception.date, affected.flow, implementing_jurisdiction)) %>% 
-  unique()
-
-TRAINS.outward <- aggregate(data = TRAINS.outward,`Reporter.jurisdiction`  ~ intervention_id , FUN = function(x) paste0(x, collapse = ","))
-
 
 # Combine -------------------------------------------------
 
 TRAINS.out <- rbind(TRAINS.inward, TRAINS.outward, TRAINS.rest)
-
-nrow(TRAINS.out) == nrow(TRAINS)
-
 saveRDS(TRAINS.out, file = paste0(path.data.out, "TRAINS.affected.jurisdictions.Rds"))
 
 

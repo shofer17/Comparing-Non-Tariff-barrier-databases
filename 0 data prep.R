@@ -206,32 +206,26 @@ TRAINS.non.world <- TRAINS.non.world %>%
 
 #add eu
 TRAINS.non.world <- merge(TRAINS.non.world, eu, by.x = "ISO_affected", by.y = "EU", all.x = T, allow.cartesian = T)
-TRAINS.non.world <- TRAINS.non.world %>% 
-  left_join(eu, by = c("ISO_affected" = "EU", multiple = "all"))
-
-names(TRAINS.non.world)
 TRAINS.non.world$ISO_affected <- ifelse(TRAINS.non.world$ISO_affected == "EU", TRAINS.non.world$ISO_EU, TRAINS.non.world$ISO_affected)
 TRAINS.non.world <- TRAINS.non.world %>% 
   select(-c(name, ISO_EU)) %>%
   filter(ISO_affected %in% selected.countries)%>%
-  left_join(country.names[, c("name", "iso_code")], by = c("ISO_affected", "iso_code"))
+  left_join(country.names[, c("name", "iso_code")], by = c("ISO_affected" =  "iso_code")) %>%
+  mutate(affected.jurisdiction = name)%>%
+  select(-name) #add GTA names
 
 
 rm(eu, translate.affected)
-
-TRAINS.world$ISO_affected <- NA
-
-test <- rbind(TRAINS.world, TRAINS.non.world)
+TRAINS.non.world$ISO_affected <- NULL
+TRAINS <- rbind(TRAINS.world, TRAINS.non.world)
 
 
-
-converted.affected <- aggregate(data = TRAINS[, c("measure.id", "ISO_affected")],  ISO_affected ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
+# aggreagate affected countries
+converted.affected <- aggregate(data = TRAINS[, c("measure.id", "affected.jurisdiction")],  affected.jurisdiction ~ measure.id , FUN = function(x) paste0(x, collapse = ","))
 TRAINS <- TRAINS %>%
   select(-affected.jurisdiction) %>%
   unique() %>%
   left_join(y = converted.affected, by = "measure.id")
-
-# In best case use GTA function to get proper affected countries
 
 
 ## HS codes ------------
@@ -272,6 +266,18 @@ test <- TRAINS.asymmetric.6dig.hs12[is.na(TRAINS.asymmetric.6dig.hs12$hs12.dig.6
 
 saveRDS(TRAINS.asymmetric.6dig.hs12, file = paste0(path.data.out, "TRAINS_asymmetric_6dig.hs12.RData"))
 rm(TRAINS.asymmetric.6dig.hs12, TRAINS.2, TRAINS.4, TRAINS.6, converted.hs)
+
+## Affected  --------------------
+
+world.affected <- readRDS(file = paste0(path.data.out, "TRAINS.affected.jurisdictions.Rds"))
+names(world.affected) <- c("measure.id", "affected.world")
+
+TRAINS <- TRAINS %>% 
+  left_join(world.affected, by = "measure.id")
+
+TRAINS$affected.jurisdiction <- ifelse(TRAINS$affected.jurisdiction == "World", 
+                                       TRAINS$affected.world, 
+                                       TRAINS$affected.jurisdiction)
 
 
 ## ISIC -------------
