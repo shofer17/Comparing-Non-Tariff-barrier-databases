@@ -279,6 +279,9 @@ TRAINS$affected.jurisdiction <- ifelse(TRAINS$affected.jurisdiction == "World",
                                        TRAINS$affected.world, 
                                        TRAINS$affected.jurisdiction)
 
+TRAINS <- TRAINS %>% 
+  select(-affected.world) %>%
+  filter(!is.na(affected.jurisdiction))
 
 ## ISIC -------------
 
@@ -333,24 +336,30 @@ data.out <- data.frame()
 for(i in years){ #aggregate by year to ease computational burden
   data.loop <- TRAINS %>% filter(years.in.force == i)
   
-  data.loop <- aggregate(data = data.loop, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
+  data.loop <- aggregate(data = data.loop, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
   
   data.out <- rbind(data.out, data.loop)
 }
 
 #TRAINS <- aggregate(data = TRAINS, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
-names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.interventions")
+names(data.out) <- c("country.1", "country.2", "year","chapter","mast.chapter",  "number.of.interventions")
 data.out$chapter <- ifelse(data.out$chapter == "A", "AB", data.out$chapter)
-data.out <- pivot_wider(data.out, id_cols = 1:3, names_from = "chapter", values_from = "number.of.interventions")
+data.out$number.of.interventions <- ifelse(is.na(data.out$number.of.interventions), 0, data.out$number.of.interventions)
+data.out <- pivot_wider(data.out, id_cols = 1:4, names_from = "chapter", values_from = "number.of.interventions")
+data.out$AB <- ifelse(is.na(data.out$AB), 0, data.out$AB)
+data.out$D <- ifelse(is.na(data.out$D), 0, data.out$D)
 data.out$GTT <- data.out$AB + data.out$D
-data.out <- pivot_longer(data.out, cols = 4:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+data.out <- pivot_longer(data.out, cols = 5:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "mast.chapter", values_from = "number.of.interventions")
+data.out[is.na(data.out)] <- 0
+data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
 
 # add pairs with 0 interventions associated
 grid$chapter <- as.character(grid$chapter)
 # test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
 # nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
 data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
-data.out$number.of.interventions <- ifelse(is.na(data.out$number.of.interventions), 0,data.out$number.of.interventions)
+data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 
 saveRDS(data.out, file = paste0(path.data.out, 
@@ -617,24 +626,29 @@ data.out <- data.frame()
 for(i in years){
   data.loop <- GTA %>% filter(years.in.force == i)
   
-  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter, FUN = function(x) length(unique(x)))
+  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
   
   data.out <- rbind(data.out, data.loop)
 }
 
-names(data.out) <- c("country.1", "country.2", "year","chapter",  "number.of.interventions")
+names(data.out) <- c("country.1", "country.2", "year","chapter","mast.chapter",  "number.of.interventions")
 
-data.out <- pivot_wider(data.out, id_cols = 1:3, names_from = "chapter", values_from = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = 1:4, names_from = "chapter", values_from = "number.of.interventions")
+data.out$AB <- ifelse(is.na(data.out$AB), 0, data.out$AB)
+data.out$D <- ifelse(is.na(data.out$D), 0, data.out$D)
 data.out$GTT <- data.out$AB + data.out$D
-data.out <- pivot_longer(data.out, cols = 4:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+data.out <- pivot_longer(data.out, cols = 5:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "mast.chapter", values_from = "number.of.interventions")
+data.out[is.na(data.out)] <- 0
+data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
+
+
 
 # test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
 # nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
 # add pairs with 0 interventions associated
 data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T)
-data.out$number.of.interventions <- ifelse(is.na(data.out$number.of.interventions), 0,data.out$number.of.interventions)
-
-
+data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 saveRDS(data.out, file = paste0(path.data.out, 
                                 "GTA_symmetric_isic.RData"))

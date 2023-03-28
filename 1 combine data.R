@@ -125,11 +125,19 @@ for(i in column.dummy.start:ncol(TRAINS.sym)){ # create dummies and add both cou
 
 ### Linreg -------------------------------------------------------------------------
 
-linreg <- lm(data = TRAINS.sym, tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
+#normal
+linreg <- lm(data = TRAINS.sym, tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
 summary(linreg)
 
+#fixed effects
+linreg.fixed <- "linreg.fixed <- lm(data = TRAINS.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
+linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),")")
+eval(parse(text = linreg.fixed))
+summary(linreg.fixed)
 
-linreg.fixed <- "linreg.fixed <- lm(data = TRAINS.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
+
+#FE + interventions per chapter
+linreg.fixed <- "linreg.fixed <- lm(data = TRAINS.sym, tij ~ B + C + D + E + F + G + P + N + I + L + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
 linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),")")
 eval(parse(text = linreg.fixed))
 summary(linreg.fixed)
