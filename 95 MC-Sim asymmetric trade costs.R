@@ -12,7 +12,8 @@ library(ggplot2)
 library(ggpubr)
 library(gtalibrary)
 library(tidyverse)
-
+library(fastDummies)
+setwd("..")
 options(scipen = 999)
 rm(list = ls())
 
@@ -150,7 +151,6 @@ data$total <- ifelse(is.na(data$total), 0, data$total)
 
 rm(GTA.coverage, GTA.coverage.year, grid, data.loop, GTA)
 # 2.2 Create model -----------------------------------------------------------------
-
 #values are roughly what Arvics et al. (2016) estimated
 b_0 <- 0 #not from arivs
 b_1 <- 0.1 # measures (not from arvis)
@@ -165,9 +165,9 @@ censor.value <- 35
 sim.data <- data %>% filter(chapter == "D")
 sim.data <- sim.data %>%
   left_join(controls, by = c( "country.1" = "iso3_d", "country.2" = "iso3_o", "year" = "year"))
+
 # create model
 sim.data$trade.costs <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_6 * sim.data$comlang_ethno  + b_8 * sim.data$fta_wto+ b_7 *sim.data$comlang_off + b_8 * sim.data$comcol + rnorm(nrow(sim.data), 0, 5) #
-sim.data <- sim.data[!is.na(sim.data$trade.costs),]
 sim.data$trade.costs <- ifelse(sim.data$trade.costs < 0, 0, sim.data$trade.costs) #set a few neg. values to 0
 # hist(sim.data$trade.costs, breaks = 100)
 # hist(trade.costs$tij, breaks = 100)
@@ -175,7 +175,7 @@ sim.data$trade.costs <- ifelse(sim.data$trade.costs < 0, 0, sim.data$trade.costs
 
 # 2.3. censor it --------------------------------------------------------------
 test <- log(sim.data$gdp_d) + log(sim.data$gdp_o) - log(sim.data$trade.costs)
-hist(test)
+#hist(test)
 sim.data.lin <- sim.data
 sim.data$trade.costs <- ifelse(log(sim.data$gdp_d) + log(sim.data$gdp_o ) - log(sim.data$trade.costs) > censor.value, 0, sim.data$trade.costs ) #USE SECTOR GDP
 sim.data.lin$trade.costs <- ifelse(log(sim.data.lin$gdp_d) + log(sim.data.lin$gdp_o ) - log(sim.data.lin$trade.costs) > censor.value, NA, sim.data.lin$trade.costs ) #USE SECTOR GDP
@@ -201,9 +201,120 @@ censored.data <- aggregate(data = censored.data, comparison ~ correct, sum)
 
 
 # 2.5 regressions --------------------------------------------------------------
-sim.data$id <- paste0(sim.data$country.1, sim.data$country.2)
+## Setup -----------------------------------------------------------------------
+
+GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
+sim.data.lin <- merge(sim.data.lin, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
+sim.data.lin <- dummy_cols(sim.data.lin, select_columns = "country.1")
+
+column.dummy.start <- min(grep("country.1.", names(sim.data.lin)))
+
+names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)] <- substr(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], 11,13)
+#sim.data.lin$ZWE <- 0 #correct for last country in country.2
+
+for(i in column.dummy.start:ncol(sim.data.lin)){ # create dummies and add both countries
+  sim.data.lin[,i] <- ifelse((sim.data.lin[, "country.1"] == names(sim.data.lin)[i]) |
+                          (sim.data.lin[, "country.2"] == names(sim.data.lin)[i]), 
+                        1,0)
+}
+
+
+sim.data.lin$id <- paste0(sim.data.lin$country.1, sim.data.lin$country.2)
 
 
 linreg <- lm(data = sim.data.lin, trade.costs ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comcol + comlang_off)
 summary(linreg)
 
+
+### Linreg -------------------------------------------------------------------------
+
+linreg <- lm(data = sim.data.lin, tij ~ total.revealed  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
+summary(linreg)
+
+
+linreg.fixed <- "linreg.fixed <- lm(data = sim.data.lin, tij ~ total.revealed + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
+linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "+" ),")")
+eval(parse(text = linreg.fixed))
+summary(linreg.fixed)
+
+### Linreg (weighted) -------------------------------------------------------------------------
+
+#geom mean
+linreg.weighted.geom <- lm(data = sim.data.lin, 
+                           tij ~ total.revealed  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           weights = coverage.geom.mean)
+summary(linreg.weighted.geom)
+
+
+linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = sim.data.lin, tij ~ total.revealed + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin.lin)], collapse = "+" ),", weights = coverage.geom.mean)")
+eval(parse(text = linreg.weighted.fixed.geom))
+summary(linreg.weighted.fixed.geom)
+
+
+#arith mean
+linreg.weighted.mean <- lm(data = sim.data.lin, 
+                           tij ~ total.revealed  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           weights = coverage.mean)
+summary(linreg.weighted.mean)
+
+
+linreg.weighted.fixed.mean <- "linreg.weighted.fixed.mean <- lm(data = sim.data.lin, tij ~ total.revealed + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.mean <- paste0(linreg.weighted.fixed.mean,"+", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "+" ),", weights = coverage.mean)")
+eval(parse(text = linreg.weighted.fixed.mean))
+summary(linreg.weighted.fixed.mean)
+
+
+
+library(texreg)
+texreg(list(linreg, linreg.fixed, linreg.weighted.mean, linreg.weighted.fixed.mean,  linreg.weighted.geom, linreg.weighted.fixed.geom) )
+
+
+
+### Heckman -------------------------------------------------------------------------
+
+sim.data.lin$is.available <- ifelse(is.na(sim.data.lin$tij), 0, 1)
+sim.data.lin <- relocate(sim.data.lin, is.available, .before = total.revealed)
+library(sampleSelection)
+heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
+                    tij ~ total.revealed + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
+                    method = "2step",
+                    data = sim.data.lin)
+summary(heckit)
+
+
+
+heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total.revealed + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
+heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(sim.data.lin)[60:ncol(sim.data.lin)], collapse = "+" ),',method = "2step",data = sim.data.lin)')
+eval(parse(text = heckman.fixed))
+summary(heckman.fixed)
+
+
+detach("package:goft")
+detach("package:fitdistrplus")
+detach("package:MASS")
+
+
+### PPML -------------------------------------------------------------------------
+library(gravity)
+
+ppml <- ppml(data = sim.data.lin, 
+             dependent_variable = "tij", 
+             distance = "distw_harmonic", 
+             additional_regressors = c("total.revealed","comlang_off", "comcol", 
+                                       "contig", "comlang_ethno", "fta_wto", "lsci", 
+                                       "lpi", "landlocked", "geometric_avg_tariff", "coverage.mean"))
+summary(ppml)
+
+
+ppml.fixed <- "ppml.fixed <- ppml(data = sim.data.lin, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('total.revealed','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
+ppml.fixed <- paste0(ppml.fixed,"'", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "','" ),"'", "))")
+eval(parse(text = ppml.fixed))
+summary(ppml.fixed)
+
+### Bind together
+names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
+names(heckit$lm$qr) <- gsub("XO", "", names(heckit$qr$coefficients))
+
+library(texreg)
+texreg(list(linreg, linreg.fixed, heckit, heckman.fixed, ppml, ppml.fixed) )
