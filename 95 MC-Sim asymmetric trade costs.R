@@ -222,6 +222,7 @@ for(i in column.dummy.start:ncol(sim.data.lin)){ # create dummies and add both c
 sim.data.lin$id <- paste0(sim.data.lin$country.1, sim.data.lin$country.2)
 rm(controls, data.out, trade.costs, data, GTA.measurement, sim.data)
 backup <- sim.data.lin
+sim.data.lin$id <- NULL
 ### Linreg -------------------------------------------------------------------------
 
 linreg <- lm(data = sim.data.lin, tij ~ total.revealed  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
@@ -243,7 +244,7 @@ summary(linreg.weighted.geom)
 
 
 linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = sim.data.lin, tij ~ total.revealed + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
-linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin.lin)], collapse = "+" ),", weights = coverage.geom.mean)")
+linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "+" ),", weights = coverage.geom.mean)")
 eval(parse(text = linreg.weighted.fixed.geom))
 summary(linreg.weighted.fixed.geom)
 
@@ -281,7 +282,7 @@ summary(heckit)
 
 
 heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total.revealed + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
-heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(sim.data.lin)[60:ncol(sim.data.lin)], collapse = "+" ),',method = "2step",data = sim.data.lin)')
+heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(sim.data.lin)[100:ncol(sim.data.lin)], collapse = "+" ),',method = "2step",data = sim.data.lin)')
 eval(parse(text = heckman.fixed))
 summary(heckman.fixed)
 
