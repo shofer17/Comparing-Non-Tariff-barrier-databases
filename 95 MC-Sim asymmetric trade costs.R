@@ -220,12 +220,8 @@ for(i in column.dummy.start:ncol(sim.data.lin)){ # create dummies and add both c
 
 
 sim.data.lin$id <- paste0(sim.data.lin$country.1, sim.data.lin$country.2)
-
-
-linreg <- lm(data = sim.data.lin, trade.costs ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comcol + comlang_off)
-summary(linreg)
-
-
+rm(controls, data.out, trade.costs, data, GTA.measurement, sim.data)
+backup <- sim.data.lin
 ### Linreg -------------------------------------------------------------------------
 
 linreg <- lm(data = sim.data.lin, tij ~ total.revealed  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
