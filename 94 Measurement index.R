@@ -69,6 +69,8 @@ TRAINS$measure.id <- ifelse(is.na(TRAINS$measure.id), 0, TRAINS$measure.id)
 GTA$coverage.measure <- GTA$intervention.id / log(GTA$gdp_o )
 TRAINS$coverage.measure <- TRAINS$measure.id / log(TRAINS$gdp_o)
 
+writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index.xlsx"))
+
 GTA <- GTA %>% select(-c(gdp_o))
 TRAINS <- TRAINS %>% select(-c(measure.id, gdp_o))
 

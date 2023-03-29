@@ -1,14 +1,19 @@
+# This script gets loaded in at the start of every other script and gives
+# the essential definitions and function. 
 # Parameters
 
 library(tidyverse)
 library(splitstackshape)
 library(gtalibrary)
+
 years <- 2009:2019
+gta_colour_palette()
 
 # Paths
 path.data.raw <- "1 data/0 data raw/"
 path.data.out <- "1 data/1 data processed/"
 path.data.reg <- "1 data/2 data for regression/"
+path.plot <- "2 plots/"
 
 # available countries and MAST
 selected.countries <- read.csv(file = paste0(path.data.out, "selected countries.csv"))$x
