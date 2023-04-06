@@ -124,7 +124,7 @@ for(i in column.dummy.start:ncol(TRAINS.sym)){ # create dummies and add both cou
 
 
 ### Linreg -------------------------------------------------------------------------
-
+# ADD TIME FIXED EFFECTS -------------------------
 #normal
 linreg <- lm(data = TRAINS.sym, tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
 summary(linreg)
@@ -146,12 +146,12 @@ summary(linreg.fixed)
 
 #geom mean
 linreg.weighted.geom <- lm(data = TRAINS.sym, 
-                           tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
                            weights = coverage.geom.mean)
 summary(linreg.weighted.geom)
 
 
-linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = TRAINS.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = TRAINS.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
 linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),", weights = coverage.geom.mean)")
 eval(parse(text = linreg.weighted.fixed.geom))
 summary(linreg.weighted.fixed.geom)
@@ -159,12 +159,12 @@ summary(linreg.weighted.fixed.geom)
 
 #arith mean
 linreg.weighted.mean <- lm(data = TRAINS.sym, 
-                           tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
                            weights = coverage.mean)
 summary(linreg.weighted.mean)
 
 
-linreg.weighted.fixed.mean <- "linreg.weighted.fixed.mean <- lm(data = TRAINS.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.mean <- "linreg.weighted.fixed.mean <- lm(data = TRAINS.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
 linreg.weighted.fixed.mean <- paste0(linreg.weighted.fixed.mean,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),", weights = coverage.mean)")
 eval(parse(text = linreg.weighted.fixed.mean))
 summary(linreg.weighted.fixed.mean)
@@ -173,17 +173,17 @@ summary(linreg.weighted.fixed.mean)
 ### Heckman -------------------------------------------------------------------------
 
 TRAINS.sym$is.available <- ifelse(is.na(TRAINS.sym$tij), 0, 1)
-TRAINS.sym <- relocate(TRAINS.sym, is.available, .before = number.of.interventions)
+TRAINS.sym <- relocate(TRAINS.sym, is.available, .before = total)
 library(sampleSelection)
 heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
-                    tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
+                    tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
                     method = "2step",
                     data = TRAINS.sym)
 summary(heckit)
 
 
 exclude.colinearity <- c()
-heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ number.of.interventions + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
+heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
 heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(TRAINS.sym)[89:ncol(TRAINS.sym)], collapse = "+" ),',method = "2step",data = TRAINS.sym)')
 eval(parse(text = heckman.fixed))
 summary(heckman.fixed)
@@ -200,13 +200,13 @@ library(gravity)
 ppml <- ppml(data = TRAINS.sym, 
              dependent_variable = "tij", 
              distance = "distw_harmonic", 
-             additional_regressors = c("number.of.interventions","comlang_off", "comcol", 
+             additional_regressors = c("total","comlang_off", "comcol", 
                                        "contig", "comlang_ethno", "fta_wto", "lsci", 
                                        "lpi", "landlocked", "geometric_avg_tariff", "coverage.mean"))
 summary(ppml)
 
 
-ppml.fixed <- "ppml.fixed <- ppml(data = TRAINS.sym, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('number.of.interventions','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
+ppml.fixed <- "ppml.fixed <- ppml(data = TRAINS.sym, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('total','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
 ppml.fixed <- paste0(ppml.fixed,"'", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "','" ),"'", "))")
 eval(parse(text = ppml.fixed))
 summary(ppml.fixed)
@@ -231,7 +231,6 @@ GTA.zero.countries <- read.csv(paste0(path.data.reg, "GTA_non_zero_countries.csv
 GTA.sym <- dummy_cols(GTA.sym, select_columns = "country.1")
 
 column.dummy.start <- min(grep("country.1.", names(GTA.sym)))
-
 names(GTA.sym)[column.dummy.start:ncol(GTA.sym)] <- substr(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], 11,13)
 #GTA.sym$ZWE <- 0 #correct for last country in country.2
 
@@ -241,15 +240,15 @@ for(i in column.dummy.start:ncol(GTA.sym)){ # create dummies and add both countr
                         1,0)
 }
 
-
+GTA.sym <- dummy_cols(GTA.sym, select_columns = "year")
 ### Linreg -------------------------------------------------------------------------
 
-linreg <- lm(data = GTA.sym, tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
+linreg <- lm(data = GTA.sym, tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
 summary(linreg)
 
 
-linreg.fixed <- "linreg.fixed <- lm(data = GTA.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
-linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], collapse = "+" ),")")
+linreg.fixed <- "linreg.fixed <- lm(data = GTA.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
+linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], collapse = "+" ),", weights = coverage.geom.mean)")
 eval(parse(text = linreg.fixed))
 summary(linreg.fixed)
 
@@ -257,12 +256,12 @@ summary(linreg.fixed)
 
 #geom mean
 linreg.weighted.geom <- lm(data = GTA.sym, 
-                           tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
                            weights = coverage.geom.mean)
 summary(linreg.weighted.geom)
 
 
-linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = GTA.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = GTA.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
 linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], collapse = "+" ),", weights = coverage.geom.mean)")
 eval(parse(text = linreg.weighted.fixed.geom))
 summary(linreg.weighted.fixed.geom)
@@ -270,12 +269,12 @@ summary(linreg.weighted.fixed.geom)
 
 #arith mean
 linreg.weighted.mean <- lm(data = GTA.sym, 
-                           tij ~ number.of.interventions  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
+                           tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
                            weights = coverage.mean)
 summary(linreg.weighted.mean)
 
 
-linreg.weighted.fixed.mean <- "linreg.weighted.fixed.mean <- lm(data = GTA.sym, tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
+linreg.weighted.fixed.mean <- "linreg.weighted.fixed.mean <- lm(data = GTA.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
 linreg.weighted.fixed.mean <- paste0(linreg.weighted.fixed.mean,"+", paste0(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], collapse = "+" ),", weights = coverage.mean)")
 eval(parse(text = linreg.weighted.fixed.mean))
 summary(linreg.weighted.fixed.mean)
@@ -290,18 +289,18 @@ texreg(list(linreg, linreg.fixed, linreg.weighted.mean, linreg.weighted.fixed.me
 ### Heckman -------------------------------------------------------------------------
 
 GTA.sym$is.available <- ifelse(is.na(GTA.sym$tij), 0, 1)
-GTA.sym <- relocate(GTA.sym, is.available, .before = number.of.interventions)
+GTA.sym <- relocate(GTA.sym, is.available, .before = total)
 library(sampleSelection)
 heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
-                 tij ~ number.of.interventions + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
+                 tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
                  method = "2step",
                  data = GTA.sym)
 summary(heckit)
 
 
 
-heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ number.of.interventions + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
-heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(GTA.sym)[60:ncol(GTA.sym)], collapse = "+" ),',method = "2step",data = GTA.sym)')
+heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
+heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(GTA.sym)[80:ncol(GTA.sym)], collapse = "+" ),',method = "2step",data = GTA.sym)')
 eval(parse(text = heckman.fixed))
 summary(heckman.fixed)
 
@@ -317,13 +316,13 @@ library(gravity)
 ppml <- ppml(data = GTA.sym, 
      dependent_variable = "tij", 
      distance = "distw_harmonic", 
-     additional_regressors = c("number.of.interventions","comlang_off", "comcol", 
+     additional_regressors = c("total","comlang_off", "comcol", 
                                "contig", "comlang_ethno", "fta_wto", "lsci", 
                                  "lpi", "landlocked", "geometric_avg_tariff", "coverage.mean"))
 summary(ppml)
 
 
-ppml.fixed <- "ppml.fixed <- ppml(data = GTA.sym, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('number.of.interventions','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
+ppml.fixed <- "ppml.fixed <- ppml(data = GTA.sym, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('total','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
 ppml.fixed <- paste0(ppml.fixed,"'", paste0(names(GTA.sym)[column.dummy.start:ncol(GTA.sym)], collapse = "','" ),"'", "))")
 eval(parse(text = ppml.fixed))
 summary(ppml.fixed)

@@ -291,7 +291,15 @@ detach("package:goft")
 detach("package:fitdistrplus")
 detach("package:MASS")
 
+names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
+names(heckit$lm$qr) <- gsub("XO", "", heckit$lm$qr[1])
+names(heckit$lm$effects) <- gsub("XO", "", names(heckit$lm$effects))
+names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
 
+t <- texreg(list(linreg, linreg.fixed, linreg.weighted.geom, linreg.weighted.fixed.geom, heckit))
+colnames(heckit$lm$qr[[1]]) <- gsub("XO", "", colnames(heckit$lm$qr[[1]]))
+test <- colnames(heckit$lm$qr[[1]])
+hecki
 ### PPML -------------------------------------------------------------------------
 library(gravity)
 
