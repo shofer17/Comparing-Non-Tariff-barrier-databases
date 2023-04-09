@@ -291,8 +291,8 @@ texreg(list(linreg, linreg.fixed, linreg.weighted.mean, linreg.weighted.fixed.me
 GTA.sym$is.available <- ifelse(is.na(GTA.sym$tij), 0, 1)
 GTA.sym <- relocate(GTA.sym, is.available, .before = total)
 library(sampleSelection)
-heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
-                 tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
+heckit <- selection(is.available ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean , 
+                 tij ~ total + log(distw_harmonic) + comlang_off + comcol+ contig + fta_wto + lpi + landlocked + geometric_avg_tariff + coverage.mean,
                  method = "2step",
                  data = GTA.sym)
 summary(heckit)
