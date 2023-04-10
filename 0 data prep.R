@@ -689,28 +689,18 @@ for(i in 2007:max(years)){
   
 }
 
-# WB.lpi[,2:ncol(WB.lpi)] <- apply(WB.lpi[,2:ncol(WB.lpi)], 2, FUN = as.numeric)
-# test <- apply(WB.lpi[,2:ncol(WB.lpi)], 1, FUN = function(x) na_interpolation(x))
+WB.lpi[WB.lpi$Code == "TMP", "2020"] <- WB.lpi[WB.lpi$Code == "TMP", "2007"]
+WB.lpi  <- WB.lpi %>%
+  filter(!Code %in% c("YUG")) %>%
+  pivot_longer(cols = 2:ncol(WB.lpi), names_to = "year") %>%
+  group_by(Code) %>%
+  mutate(value = imputeTS::na_interpolation(value))
 
-#if time: make transition smooth, but will prob. not make much of a difference...
-WB.lpi$`2020` <- NULL
-WB.lpi$`2008` <- WB.lpi$`2007`
-WB.lpi$`2009` <- WB.lpi$`2007`
-WB.lpi$`2011` <- WB.lpi$`2010`
-WB.lpi$`2013` <- WB.lpi$`2014`
-WB.lpi$`2015` <- WB.lpi$`2016`
-WB.lpi$`2017` <- WB.lpi$`2018`
-WB.lpi$`2019` <- WB.lpi$`2018`
-
-WB.lpi <- pivot_longer(WB.lpi, cols = 2:ncol(WB.lpi), names_to = "year", values_to = "lpi")
 
 WB.lpi <- WB.lpi %>% 
   filter(Code %in% selected.countries) %>%
   filter(year %in% years)
 
-# t <- apply(data.out, 1, FUN = function(x) na.approx(x[2:(ncol(data.out)-1)]))
-# t <- data.frame(t)
-# library(zoo)
 
 names(WB.lpi) <- c("country.1", "year", "lpi")
 rm(names.sheets, num.sheets, data.out,i)
