@@ -94,9 +94,9 @@ a <- 0.9
 GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index.xlsx"))
 GTA.coverage <- GTA.coverage %>% 
   filter(chapter == "D")
-CRI <- max(na.omit(GTA.coverage$coverage.measure))
+CRI <- max(na.omit(GTA.coverage$coverage.measure.sqrt))
 
-GTA.coverage$simulated.interventions <- (CRI * log(GTA.coverage$gdp_o)) /a
+GTA.coverage$simulated.interventions <- (CRI * sqrt(GTA.coverage$gdp_o)) /a
 GTA.coverage <- GTA.coverage %>% 
   filter(intervention.id != 0)
 #GTA.coverage$intervention.id <- ifelse(GTA.coverage$intervention.id == 0, 1, GTA.coverage$intervention.id) #if we know of know intervention, set to 1 for scaling up, otherwise infinite scale up
@@ -155,6 +155,7 @@ data$total <- ifelse(is.na(data$total), 0, data$total)
 rm(GTA.coverage, GTA.coverage.year, grid, data.loop, GTA)
 
 # 2.2 Create model -----------------------------------------------------------------
+GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
 
 #clean data
 sim.data <- data %>% filter(chapter == "D")
@@ -167,15 +168,21 @@ sim.data <- sim.data %>%
   filter(!is.na(gdp_o)) 
 sim.data$gdp <- apply(sim.data[ , c("gdp_d", "gdp_o")], 1, FUN = function(x) exp(mean(log(x))))
 
+#add CRI
+sim.data <- merge(sim.data, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
+
+
 # create model
 sim.data$lpi <- ifelse(is.na(sim.data$lpi), 0, sim.data$lpi)
 sim.data$geometric_avg_tariff <- ifelse(is.na(sim.data$geometric_avg_tariff), 0, sim.data$geometric_avg_tariff)
+perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
+
 
 ### Regresson ------------------------------------------------------------------
 #values are roughly what Arvics et al. (2016) estimated
-b_0 <- 0 #not from arivs
-b_1 <- 0.2 # measures (not from arvis)
-b_2 <- 20 # distance (not from arvis)
+b_0 <- 20 #not from arivs
+b_1 <- 0.1 # measures (not from arvis)
+b_2 <- 40 # distance (not from arvis)
 b_3 <- -40 # common border
 b_4 <- -5 #common language ethno
 b_5 <- -15 #common RTA
@@ -185,6 +192,8 @@ b_8 <- -1 # LSCI
 b_9 <- -10 # LPI
 b_10 <- 20 #Landlocked
 b_11 <- 1 #Tariffs
+b_12 <- -18.5 # log(GDP) for censoring   //b_12 <- -0.0000031523
+
 
 #get error term
 library(MASS)
@@ -193,26 +202,22 @@ bivariate_data <- as.data.frame(mvrnorm(n=nrow(sim.data),
                                         Sigma=matrix(c(10, 4, 4,10), ncol=2)))
 
 
+sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *log(sim.data$gdp) + bivariate_data$V1 #
+sim.data$is.censord  <- sim.data$censoring.thresold  < 0
+perc.censored.synth <- sum(sim.data$is.censord)/nrow(sim.data) #potentially adjust weights of log(GDP)
 
-sim.data$trade.costs <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + bivariate_data$V1 #
-#sim.data$trade.costs <- ifelse(sim.data$trade.costs < 0, 0, sim.data$trade.costs) #set a few neg. values to 0
-sim.data$trade.costs <- sim.data$trade.costs
+sim.data$trade.costs <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + bivariate_data$V2 #
+sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord > 0)
 
 
+t_out <- sampleSelection::selection(data = sim.data,
+                                    is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp), 
+                                    trade.costs.recorded ~ total.revealed +  log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff)
+summary(t_out)
 
-# hist(sim.data$trade.costs, breaks = 100, xlim = range(0,600))
-# hist(trade.costs$tij, breaks = 100, xlim = range(0,600))
 
-# 2.3. censor it --------------------------------------------------------------
-#Censoring is done with log(GDP) and normal GDP,
-b_12 <- -9.52 # //b_12 <- -0.0000031523
-perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
-
-sim.data$censored <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *log(sim.data$gdp) + bivariate_data$V2
-
-perc.censored.synth <- sum(sim.data$censored > 0)/nrow(sim.data)
-#test <- sim.data[is.na(sim.data$trade.costs),]
-sim.data$trade.costs <- ifelse(sim.data$censored > 0, 0, sim.data$trade.costs)
+hist(sim.data$trade.costs, breaks = 100, xlim = range(0,600))
+hist(trade.costs$tij, breaks = 100, xlim = range(0,600))
 
 
 # 2.4 test if censored countries are correct -----------------------------------
@@ -257,12 +262,17 @@ for(i in column.dummy.start:ncol(sim.data.lin)){ # create dummies and add both c
 #rm(controls, data.out, trade.costs, data, GTA.measurement)
 backup <- sim.data.lin
 
+sim.data$trade.costs.recorded.na <- ifelse(sim.data$trade.costs.recorded == 0, NA, sim.data$trade.costs.recorded)
 
-
-lin <- "lm(data = sim.data.lin,"
-reg <- "trade.costs ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff + coverage.mean"
+lin <- "lm(data = sim.data,"
+reg <- "trade.costs.recorded.na ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff + coverage.mean"
 reg.CRI.exl <- "trade.costs ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff"
 fe  <- paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "+" )
+
+test <- sim.data %>% filter(!is.na(coverage.mean))
+ggplot(test, aes(x = coverage.mean.log, y = total.revealed))+
+  geom_point()+
+  geom_smooth(method = "lm")
 
 ### Linreg -------------------------------------------------------------------------
 

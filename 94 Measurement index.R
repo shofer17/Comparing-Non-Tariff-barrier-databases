@@ -68,6 +68,9 @@ TRAINS$measure.id <- ifelse(is.na(TRAINS$measure.id), 0, TRAINS$measure.id)
 # get measures
 GTA$coverage.measure <- GTA$intervention.id / log(GTA$gdp_o )
 TRAINS$coverage.measure <- TRAINS$measure.id / log(TRAINS$gdp_o)
+GTA$coverage.measure.sqrt <- GTA$intervention.id / sqrt(GTA$gdp_o )
+TRAINS$coverage.measure.sqrt <- TRAINS$measure.id / sqrt(TRAINS$gdp_o)
+
 
 writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index.xlsx"))
 
@@ -81,6 +84,8 @@ help <- merge(grid, GTA, by.x = c("country.1", "year", "chapter"),
 GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter"), 
              by.y = c("implementing.jurisdiction", "years.in.force", "chapter"),all.x = T)
 
+GTA$coverage.geom.mean.log <- apply(GTA[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
+GTA$coverage.mean.log <- apply(GTA[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) mean(x))
 GTA$coverage.geom.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
 GTA$coverage.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) mean(x))
 GTA$intervention.geom.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) exp(mean(log(x))))
@@ -96,7 +101,10 @@ TRAINS <- merge(help, TRAINS, by.x = c("country.2", "year", "chapter"),
              by.y = c("implementing.jurisdiction", "years.in.force", "chapter"),all.x = T)
 
 TRAINS$coverage.geom.mean <- apply(TRAINS[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
+TRAINS$coverage.geom.mean.sqrt <- apply(TRAINS[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
 TRAINS$coverage.mean <- apply(TRAINS[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) mean(x))
+TRAINS$coverage.mean.sqrt <- apply(TRAINS[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) mean(x))
+
 TRAINS <- TRAINS %>% select(-c(coverage.measure.x, coverage.measure.y))
 
 
