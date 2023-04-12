@@ -212,13 +212,15 @@ sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord > 0
 
 t_out <- sampleSelection::selection(data = sim.data,
                                     is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp), 
-                                    trade.costs.recorded ~ total.revealed +  log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff)
+                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + coverage.geom.mean)
 summary(t_out)
 
 
 hist(sim.data$trade.costs, breaks = 100, xlim = range(0,600))
 hist(trade.costs$tij, breaks = 100, xlim = range(0,600))
 
+ggplot(data= sim.data, aes(x = total.revealed, y = coverage.mean))+
+  geom_point()
 
 # 2.4 test if censored countries are correct -----------------------------------
 
