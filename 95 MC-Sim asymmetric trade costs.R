@@ -201,8 +201,8 @@ bivariate_data <- as.data.frame(mvrnorm(n=nrow(sim.data),
                                         mu=c(0, 0),
                                         Sigma=matrix(c(10, 4, 4,10), ncol=2)))
 
-
-sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *log(sim.data$gdp) + bivariate_data$V1 #
+# Please note: here plus 1 is added instad of -1 in the derivation because here everything is reversed (trade costs are positive compared to the derivation where they are negative). That makes the interpretation of the terms easier. 
+sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *log(sim.data$gdp) + 1 + bivariate_data$V1 #
 sim.data$is.censord  <- sim.data$censoring.thresold  < 0
 perc.censored.synth <- sum(sim.data$is.censord)/nrow(sim.data) #potentially adjust weights of log(GDP)
 

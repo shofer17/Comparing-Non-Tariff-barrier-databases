@@ -783,6 +783,25 @@ names(CEPII.landlocked) <- c("iso3_d", "landlocked_d")
 controls <- merge(controls, CEPII.landlocked, by = c("iso3_d"), all.x = T)
 
 
+# Intranational Trade flows
+load(file = paste0(path.data.raw, "Final goods support table.Rdata"))
+exports <- aggregate(data = final, Value  ~ Year + Reporter.jurisdiction, FUN = sum)
+exports <- exports %>%
+  filter(Year %in% years) %>%
+  left_join(country.names[, c("name", "iso_code")], by = c("Reporter.jurisdiction" =  "name")) 
+exports$Reporter.jurisdiction <- NULL
+
+
+controls <- controls %>% 
+  left_join(exports, by = c("country_id_o" = "iso_code", "year" = "Year")) %>%
+  rename( "exports_o" = "Value") %>%
+left_join(exports, by = c("country_id_d" = "iso_code", "year" = "Year")) %>%
+  rename( "exports_d" = "Value")
+
+controls <- controls %>% #get intranational trade flows by substracting exports from GDP
+  mutate(xii_o = gdp_o - exports_o) %>% 
+  mutate(xii_d = gdp_d - exports_d)
+
 #only get necessary controlls
 controls <- controls %>% 
   filter(substr(country_id_o, nchar(country_id_o), nchar(country_id_o)) != 1 & #old countries have missing values
