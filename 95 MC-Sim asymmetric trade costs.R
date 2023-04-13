@@ -23,7 +23,7 @@ trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData
 #data <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
 data <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
-controls <- controls %>% select(iso3_o, iso3_d, year, gdp_o, gdp_d)
+controls <- controls %>% select(iso3_o, iso3_d, year, gdp_o, gdp_d, exports_o, exports_d)
  
 
 # 2. preliminary checks --------------------------------------------------------
@@ -192,7 +192,8 @@ b_8 <- -1 # LSCI
 b_9 <- -10 # LPI
 b_10 <- 20 #Landlocked
 b_11 <- 1 #Tariffs
-b_12 <- -18.5 # log(GDP) for censoring   //b_12 <- -0.0000031523
+b_12 <- -10.52 # log(GDP) for censoring   //b_12 <- -0.0000031523
+sigma <- 8
 
 
 #get error term
@@ -201,8 +202,10 @@ bivariate_data <- as.data.frame(mvrnorm(n=nrow(sim.data),
                                         mu=c(0, 0),
                                         Sigma=matrix(c(10, 4, 4,10), ncol=2)))
 
+sim.data$exports <- (sim.data$exports_d * sim.data$exports_o)^(1/(2*(sigma-1)))
+
 # Please note: here plus 1 is added instad of -1 in the derivation because here everything is reversed (trade costs are positive compared to the derivation where they are negative). That makes the interpretation of the terms easier. 
-sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *log(sim.data$gdp) + 1 + bivariate_data$V1 #
+sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *sim.data$exports + 1 + bivariate_data$V1 #
 sim.data$is.censord  <- sim.data$censoring.thresold  < 0
 perc.censored.synth <- sum(sim.data$is.censord)/nrow(sim.data) #potentially adjust weights of log(GDP)
 
@@ -211,8 +214,8 @@ sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord > 0
 
 
 t_out <- sampleSelection::selection(data = sim.data,
-                                    is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + log(gdp), 
-                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + coverage.geom.mean)
+                                    is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
+                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean)
 summary(t_out)
 
 

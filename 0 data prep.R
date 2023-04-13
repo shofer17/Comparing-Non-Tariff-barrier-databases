@@ -819,7 +819,7 @@ controls$lpi <- apply(controls[ , c("lpi_d", "lpi_o")], 1, FUN = function(x) exp
 controls <- controls %>% select(-c(landlocked_o, landlocked_d, gdp.cap.ppp_d, gdpcap_ppp_o, lsci_o, lsci_d, lpi_d, lpi_o))
 saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
 
-controls <- controls %>% select(iso3_d, iso3_o, year, distw_harmonic, contig, diplo_disagreement, comlang_ethno, comlang_off, comcol, comrelig, fta_wto, dist, gdp.cap.ppp, landlocked, lsci, lpi)
+controls <- controls %>% select(iso3_d, iso3_o, year, distw_harmonic, contig, diplo_disagreement, comlang_ethno, comlang_off, comcol, comrelig, fta_wto, dist, gdp.cap.ppp, landlocked, lsci, lpi, exports_o, exports_d, gdp_d, gdp_o)
 controls <- unique(to_alphabeta(controls, "iso3_d", "iso3_o"))
 
 controls <- merge(grid, controls, by.x = c("country.1", "country.2", "year"), by.y = c("iso3_d", "iso3_o", "year"))
