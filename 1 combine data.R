@@ -93,7 +93,7 @@ saveRDS(WTO.sym, file = paste0(path.data.out,
                                 "WTO_symmetric_w_controls.RData"))
 
 # 3. run regressions -----------------
-
+sigma = 8
 ## TRAINS -----------
 TRAINS.sym <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
 TRAINS.zero.countries <- read.csv(paste0(path.data.reg, "TRAINS_non_zero_countries.csv"))
@@ -174,17 +174,20 @@ summary(linreg.weighted.fixed.mean)
 
 TRAINS.sym$is.available <- ifelse(is.na(TRAINS.sym$tij), 0, 1)
 TRAINS.sym <- relocate(TRAINS.sym, is.available, .before = total)
+TRAINS.sym$exports <- ((TRAINS.sym$gdp_d - TRAINS.sym$exports_d) * ( TRAINS.sym$gdp_o - TRAINS.sym$exports_o))^(1/(2*(sigma-1)))
+TRAINS.sym$tij.heck <- ifelse(is.na(TRAINS.sym$tij), 0, TRAINS.sym$tij)
+
 library(sampleSelection)
-heckit <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, 
-                    tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean,
-                    method = "2step",
-                    data = TRAINS.sym)
-summary(heckit)
+heckit.trains <- selection(is.available ~ log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
+                           tij.heck ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.geom.mean,
+                           method = "2step",
+                           data = TRAINS.sym)
+summary(heckit.trains)
 
 
 exclude.colinearity <- c()
-heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
-heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(TRAINS.sym)[89:ncol(TRAINS.sym)], collapse = "+" ),',method = "2step",data = TRAINS.sym)')
+heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, tij ~ total + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + exports"
+heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(TRAINS.sym)[116:ncol(TRAINS.sym)], collapse = "+" ),',method = "2step",data = TRAINS.sym)')
 eval(parse(text = heckman.fixed))
 summary(heckman.fixed)
 
@@ -290,12 +293,16 @@ texreg(list(linreg, linreg.fixed, linreg.weighted.mean, linreg.weighted.fixed.me
 
 GTA.sym$is.available <- ifelse(is.na(GTA.sym$tij), 0, 1)
 GTA.sym <- relocate(GTA.sym, is.available, .before = total)
+
+GTA.sym$exports <- ((GTA.sym$gdp_d - GTA.sym$exports_d) * ( GTA.sym$gdp_o - GTA.sym$exports_o))^(1/(2*(sigma-1)))
+GTA.sym$tij.heck <- ifelse(is.na(GTA.sym$tij), 0, GTA.sym$tij)
+
 library(sampleSelection)
-heckit <- selection(is.available ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean , 
-                 tij ~ total + log(distw_harmonic) + comlang_off + comcol+ contig + fta_wto + lpi + landlocked + geometric_avg_tariff + coverage.mean,
+heckit.gta <- selection(is.available ~ log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
+                        tij.heck ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.geom.mean,
                  method = "2step",
                  data = GTA.sym)
-summary(heckit)
+summary(heckit.gta)
 
 
 

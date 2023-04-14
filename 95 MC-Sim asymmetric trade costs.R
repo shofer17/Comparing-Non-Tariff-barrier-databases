@@ -192,7 +192,7 @@ b_8 <- -1 # LSCI
 b_9 <- -10 # LPI
 b_10 <- 20 #Landlocked
 b_11 <- 1 #Tariffs
-b_12 <- -10.52 # log(GDP) for censoring   //b_12 <- -0.0000031523
+b_12 <- -12 # log(GDP) for censoring   //b_12 <- -0.0000031523
 sigma <- 8
 
 
@@ -206,16 +206,16 @@ sim.data$exports <- (sim.data$exports_d * sim.data$exports_o)^(1/(2*(sigma-1)))
 
 # Please note: here plus 1 is added instad of -1 in the derivation because here everything is reversed (trade costs are positive compared to the derivation where they are negative). That makes the interpretation of the terms easier. 
 sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *sim.data$exports + 1 + bivariate_data$V1 #
-sim.data$is.censord  <- sim.data$censoring.thresold  < 0
+sim.data$is.censord  <- sim.data$censoring.thresold  > 0
 perc.censored.synth <- sum(sim.data$is.censord)/nrow(sim.data) #potentially adjust weights of log(GDP)
 
 sim.data$trade.costs <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + bivariate_data$V2 #
-sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord > 0)
+sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord < 1)
 
 
 t_out <- sampleSelection::selection(data = sim.data,
-                                    is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
-                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean)
+                                    !is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
+                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff)
 summary(t_out)
 
 
@@ -226,20 +226,22 @@ ggplot(data= sim.data, aes(x = total.revealed, y = coverage.mean))+
   geom_point()
 
 # 2.4 test if censored countries are correct -----------------------------------
-
+sim.data$trade.costs.recorded.na <- ifelse(sim.data$trade.costs.recorded == 0, NA, sim.data$trade.costs.recorded)
 censored.data <- merge(trade.costs[, c("country.1", "country.2", "year", "tij")],
-                       sim.data[, c("country.1", "country.2", "year", "trade.costs", "trade.costs")],
+                       sim.data[, c("country.1", "country.2", "year", "trade.costs.recorded.na")],
                        by =  c("country.1", "country.2", "year")
 )
 
 #get matrix to check if the correct values are censored
-censored.data$correct <- ifelse(is.na(censored.data$tij) & is.na(censored.data$trade.costs) , "11",
-                                ifelse(is.na(censored.data$tij) & !is.na(censored.data$trade.costs) , "10",
-                                       ifelse(!is.na(censored.data$tij) & is.na(censored.data$trade.costs), "01",
-                                              ifelse(!is.na(censored.data$tij) & !is.na(censored.data$trade.costs),"00", NA))))
+censored.data$correct <- ifelse(is.na(censored.data$tij) & is.na(censored.data$trade.costs.recorded.na) , "11",
+                                ifelse(is.na(censored.data$tij) & !is.na(censored.data$trade.costs.recorded.na) , "10",
+                                       ifelse(!is.na(censored.data$tij) & is.na(censored.data$trade.costs.recorded.na), "01",
+                                              ifelse(!is.na(censored.data$tij) & !is.na(censored.data$trade.costs.recorded.na),"00", NA))))
 censored.data$comparison <- 1
 censored.data <- aggregate(data = censored.data, comparison ~ correct, sum)
 sum(censored.data[c(1,4), 2])/sum(censored.data$comparison)
+# could play around with variables to adjust and maximise that number.
+
 
 # 2.5 regressions --------------------------------------------------------------
 ## Setup -----------------------------------------------------------------------
