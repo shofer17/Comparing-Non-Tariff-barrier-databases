@@ -83,6 +83,28 @@ GTA.sym <- merge(GTA.sym, trade.costs,
                  all.x = T)
 
 
+base.years <- controls %>%
+  filter(year %in% base)%>%
+  select(-gdp.cap.ppp)
+base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean)
+
+interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
+names(interventions) <- c(selected.mast, "total")
+
+base.years <- cbind(base.years, interventions); rm(interventions)
+
+GTA.sym.delta <- GTA.sym %>% 
+  pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
+base.years <- base.years %>% 
+  pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
+  select(-year)
+
+GTA.sym.delta <- GTA.sym.delta %>% left_join(base.years, by = c("country.1", "country.2", "chapter", "variable"))
+GTA.sym.delta$delta <- GTA.sym.delta$value.x - GTA.sym.delta$value.y
+
+
+saveRDS(GTA.sym.delta, file = paste0(path.data.out, 
+                               "GTA_delta_symmetric_w_controls.RData"))
 
 saveRDS(GTA.sym, file = paste0(path.data.out, 
                                   "GTA_symmetric_w_controls.RData"))
@@ -103,6 +125,9 @@ TRAINS.sym <- merge(TRAINS.sym, TRAINS.measurement, by = c("country.1", "country
 
 TRAINS.sym <- TRAINS.sym %>% 
   filter(chapter == "D")
+
+
+
 
 
 

@@ -688,6 +688,9 @@ for(i in 2007:max(years)){
     eval(parse(text = paste0("WB.lpi <- add_column(WB.lpi, '",i+1,"' = ",NA,", .after = '",i,"')")))
   
 }
+WB.lpi$`2006` <- WB.lpi$`2007`
+WB.lpi$`2005` <- WB.lpi$`2007`
+
 
 WB.lpi[WB.lpi$Code == "TMP", "2020"] <- WB.lpi[WB.lpi$Code == "TMP", "2007"]
 WB.lpi  <- WB.lpi %>%
@@ -718,7 +721,7 @@ WB.gdp.cap.ppp$gdp.cap.ppp <- as.numeric(WB.gdp.cap.ppp$gdp.cap.ppp)
 
 ## UNCTAD Liner shipping index ---------------
 TRAINS.to.GTA.names <- readxl::read_xlsx(path = paste0(path.data.out, "UNCTAD_GTA_conversion.table.xlsx"))
-UNCTAD.LSCI <- read.csv(paste0(path.data.raw, "UNCTAD_LSCI.csv"), skip = 2)
+UNCTAD.LSCI <- read.csv(paste0(path.data.raw, "UNCTAD_LSCI_3.csv"), skip = 2)
 UNCTAD.LSCI <- UNCTAD.LSCI[-1,]
 UNCTAD.LSCI[, 2:ncol(UNCTAD.LSCI)] <- apply(UNCTAD.LSCI[, 2:ncol(UNCTAD.LSCI)],2, FUN = as.numeric)
 UNCTAD.LSCI <- pivot_longer(UNCTAD.LSCI, cols = 2:ncol(UNCTAD.LSCI), names_to = "year_quarter", values_to = "LSI")
@@ -824,8 +827,6 @@ controls <- unique(to_alphabeta(controls, "iso3_d", "iso3_o"))
 
 controls <- merge(grid, controls, by.x = c("country.1", "country.2", "year"), by.y = c("iso3_d", "iso3_o", "year"))
 saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
-
-
 
 
 

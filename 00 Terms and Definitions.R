@@ -6,7 +6,8 @@ library(tidyverse)
 library(splitstackshape)
 library(gtalibrary)
 
-years <- 2009:2019
+years <- 2005:2019
+base <- 2005:2007
 gta_colour_palette()
 
 # Paths
