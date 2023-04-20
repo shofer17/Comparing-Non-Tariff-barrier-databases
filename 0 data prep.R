@@ -758,8 +758,8 @@ controls <- controls %>%
            "fta_wto","fta_wto_raw","entry_tp_o","entry_tp_d", "gdp_o", "gdp_d", 
            "gdpcap_ppp_o", "gdpcap_ppp_d", "entry_cost_o", "entry_cost_d", "dist")) %>%#check distance measure
   filter(iso3_d != iso3_o) %>%
-  filter(iso3_o %in% selected.countries & iso3_d %in% selected.countries)
-  
+  filter(iso3_o %in% selected.countries & iso3_d %in% selected.countries)%>% 
+  filter(iso3_d > iso3_o) # avoid double tuples (A-B, B-A)
 
 # WB.lpi
 names(WB.lpi) <- c("iso3_o", "year", "lpi_o")

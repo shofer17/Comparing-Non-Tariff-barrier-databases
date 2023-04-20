@@ -36,30 +36,30 @@ controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RD
 # 2. combine data (Symmetric) --------------------------------------------------
 
 ## WTO -----------------
-WTO.sym$chapter <- as.character(WTO.sym$chapter)
-WTO.sym$chapter <- ifelse(WTO.sym$chapter == "A", "AB", WTO.sym$chapter)
+# WTO.sym$chapter <- as.character(WTO.sym$chapter)
+# WTO.sym$chapter <- ifelse(WTO.sym$chapter == "A", "AB", WTO.sym$chapter)
+# 
+# WTO.sym <- merge(WTO.sym, controls,
+#                  by.x = c("ISO_country.1", "ISO_country.2", "year"), 
+#                  by.y = c("country_id_o", "country_id_d", "year"))
+# 
+# 
+# trade.costs$is.cost <- 1
+# WTO.sym <- merge(WTO.sym, trade.costs[, c("country.1", "country.2", "year", "chapter", "tij", "is.cost")], 
+#                     by.x = c("ISO_country.1", "ISO_country.2", "year", "chapter"),
+#                     by.y = c("country.1", "country.2", "year", "chapter"), 
+#                     all.x = T)
+# 
+# any(!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter))
+# test <- unique(WTO.sym$ISO_country.1)
+# test <- test[!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter)]
+# 
+# test <- as.numeric(na.omit(trade.costs$tij))
+# hist(trade.costs$tij, breaks = 100)
+# ev_test(na.omit(trade.costs$tij))
+# descdist(test, discrete = F)
 
-WTO.sym <- merge(WTO.sym, controls,
-                 by.x = c("ISO_country.1", "ISO_country.2", "year"), 
-                 by.y = c("country_id_o", "country_id_d", "year"))
-
-
-trade.costs$is.cost <- 1
-WTO.sym <- merge(WTO.sym, trade.costs[, c("country.1", "country.2", "year", "chapter", "tij", "is.cost")], 
-                    by.x = c("ISO_country.1", "ISO_country.2", "year", "chapter"),
-                    by.y = c("country.1", "country.2", "year", "chapter"), 
-                    all.x = T)
-
-any(!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter))
-test <- unique(WTO.sym$ISO_country.1)
-test <- test[!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter)]
-
-test <- as.numeric(na.omit(trade.costs$tij))
-hist(trade.costs$tij, breaks = 100)
-ev_test(na.omit(trade.costs$tij))
-descdist(test, discrete = F)
-
-## TRAINS -------------
+## TRAINS ----------------------------------------------------------------------
 TRAINS.sym <- merge(TRAINS.sym, controls,
                  by = c("country.1", "country.2", "year", "chapter"), 
                  all.x = T)
@@ -71,49 +71,76 @@ TRAINS.sym <- merge(TRAINS.sym, trade.costs,
                     all.x = T)
 
 
-##GTA ------------
+
+# create base years
+base.years <- controls %>%
+  filter(year %in% base)%>%
+  select(-gdp.cap.ppp)
+base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean)
+
+#make 0 data frame for interventions
+interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
+names(interventions) <- c(selected.mast, "total")
+base.years <- cbind(base.years, interventions); rm(interventions)
+
+# pivot longer to get delta
+TRAINS.sym.delta <- GTA.sym %>% 
+  pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
+base.years <- base.years %>% 
+  pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
+  select(-year)
+
+# join values and get delta
+TRAINS.sym.delta <- TRAINS.sym.delta %>% left_join(base.years, by = c("country.1", "country.2", "chapter", "variable"))
+TRAINS.sym.delta$delta <- TRAINS.sym.delta$value.x - TRAINS.sym.delta$value.y
+
+##GTA --------------------------------------------------------------------------
 
 GTA.sym <- merge(GTA.sym, controls,
                     by = c("country.1", "country.2", "year", "chapter"), 
                     all.x = T)
 
 trade.costs$is.cost <- 1
+GTA.sym.delta <- GTA.sym
 GTA.sym <- merge(GTA.sym, trade.costs, 
                  by = c("country.1", "country.2", "year", "chapter"),
                  all.x = T)
 
 
+# create base years
 base.years <- controls %>%
   filter(year %in% base)%>%
   select(-gdp.cap.ppp)
 base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean)
 
+#make 0 data frame for interventions
 interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
 names(interventions) <- c(selected.mast, "total")
-
 base.years <- cbind(base.years, interventions); rm(interventions)
 
+# pivot longer to get delta
 GTA.sym.delta <- GTA.sym %>% 
   pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
 base.years <- base.years %>% 
   pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
   select(-year)
 
+# join values and get delta
 GTA.sym.delta <- GTA.sym.delta %>% left_join(base.years, by = c("country.1", "country.2", "chapter", "variable"))
-GTA.sym.delta$delta <- GTA.sym.delta$value.x - GTA.sym.delta$value.y
+GTA.sym.delta <- GTA.sym.delta %>%
+  mutate(delta = value.x - value.y)%>%
+  select(-c(value.x, value.y)) %>%
+  pivot_wider(values_from = "delta", names_from = "variable")
+
+saveRDS(GTA.sym.delta, file = paste0(path.data.out, "GTA_delta_symmetric_w_controls.RData"))
+saveRDS(TRAINS.sym.delta, file = paste0(path.data.out, "TRAINS_delta_symmetric_w_controls.RData"))
+
+saveRDS(GTA.sym, file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
+saveRDS(TRAINS.sym, file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
+saveRDS(WTO.sym, file = paste0(path.data.out, "WTO_symmetric_w_controls.RData"))
 
 
-saveRDS(GTA.sym.delta, file = paste0(path.data.out, 
-                               "GTA_delta_symmetric_w_controls.RData"))
-
-saveRDS(GTA.sym, file = paste0(path.data.out, 
-                                  "GTA_symmetric_w_controls.RData"))
-
-saveRDS(TRAINS.sym, file = paste0(path.data.out, 
-                                "TRAINS_symmetric_w_controls.RData"))
-saveRDS(WTO.sym, file = paste0(path.data.out, 
-                                "WTO_symmetric_w_controls.RData"))
-
+rm(base.years, base)
 # 3. run regressions -----------------
 sigma = 8
 ## TRAINS -----------
@@ -127,17 +154,11 @@ TRAINS.sym <- TRAINS.sym %>%
   filter(chapter == "D")
 
 
-
-
-
-
 TRAINS.sym <- dummy_cols(TRAINS.sym, select_columns = "country.1")
-
 column.dummy.start <- min(grep("country.1.", names(TRAINS.sym)))
 
 names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)] <- substr(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], 11,13)
 #TRAINS.sym$ZWE <- 0 #correct for last country in country.2
-
 for(i in column.dummy.start:ncol(TRAINS.sym)){ # create dummies and add both countries
   TRAINS.sym[,i] <- ifelse((TRAINS.sym[, "country.1"] == names(TRAINS.sym)[i]) |
                           (TRAINS.sym[, "country.2"] == names(TRAINS.sym)[i]), 
