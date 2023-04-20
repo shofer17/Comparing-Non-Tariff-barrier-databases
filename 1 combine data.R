@@ -35,6 +35,21 @@ controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RD
 
 # 2. combine data (Symmetric) --------------------------------------------------
 
+# create base years
+base.years <- controls %>%
+  filter(year %in% base)%>%
+  select(-gdp.cap.ppp) %>%
+  left_join(trade.costs, by = c("country.1", "country.2", "chapter", "year"))
+base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean, na.action = na.pass)
+
+#make 0 data frame for interventions
+interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
+names(interventions) <- c(selected.mast, "total")
+base.years <- cbind(base.years, interventions); rm(interventions)
+base.years <- base.years %>% 
+  pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
+  select(-year)
+
 ## WTO -----------------
 # WTO.sym$chapter <- as.character(WTO.sym$chapter)
 # WTO.sym$chapter <- ifelse(WTO.sym$chapter == "A", "AB", WTO.sym$chapter)
@@ -71,28 +86,17 @@ TRAINS.sym <- merge(TRAINS.sym, trade.costs,
                     all.x = T)
 
 
-
-# create base years
-base.years <- controls %>%
-  filter(year %in% base)%>%
-  select(-gdp.cap.ppp)
-base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean)
-
-#make 0 data frame for interventions
-interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
-names(interventions) <- c(selected.mast, "total")
-base.years <- cbind(base.years, interventions); rm(interventions)
-
 # pivot longer to get delta
-TRAINS.sym.delta <- GTA.sym %>% 
-  pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
-base.years <- base.years %>% 
-  pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
-  select(-year)
+TRAINS.sym.delta <-TRAINS.sym %>% 
+  pivot_longer(cols = 5:ncol(TRAINS.sym), names_to = "variable", values_to = "value")
 
 # join values and get delta
 TRAINS.sym.delta <- TRAINS.sym.delta %>% left_join(base.years, by = c("country.1", "country.2", "chapter", "variable"))
-TRAINS.sym.delta$delta <- TRAINS.sym.delta$value.x - TRAINS.sym.delta$value.y
+TRAINS.sym.delta <- TRAINS.sym.delta %>%
+  mutate(delta = value.x - value.y)%>%
+  select(-c(value.x, value.y)) %>%
+  pivot_wider(values_from = "delta", names_from = "variable")
+
 
 ##GTA --------------------------------------------------------------------------
 
@@ -107,23 +111,10 @@ GTA.sym <- merge(GTA.sym, trade.costs,
                  all.x = T)
 
 
-# create base years
-base.years <- controls %>%
-  filter(year %in% base)%>%
-  select(-gdp.cap.ppp)
-base.years <- aggregate(data = base.years, . ~ country.1 + country.2 + chapter, FUN = mean)
-
-#make 0 data frame for interventions
-interventions <- data.frame(matrix(ncol = length(selected.mast)+1, nrow = nrow(base.years), rep(0, (length(selected.mast)+1)*nrow(base.years))))
-names(interventions) <- c(selected.mast, "total")
-base.years <- cbind(base.years, interventions); rm(interventions)
-
 # pivot longer to get delta
 GTA.sym.delta <- GTA.sym %>% 
   pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
-base.years <- base.years %>% 
-  pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
-  select(-year)
+
 
 # join values and get delta
 GTA.sym.delta <- GTA.sym.delta %>% left_join(base.years, by = c("country.1", "country.2", "chapter", "variable"))
@@ -141,36 +132,83 @@ saveRDS(WTO.sym, file = paste0(path.data.out, "WTO_symmetric_w_controls.RData"))
 
 
 rm(base.years, base)
-# 3. run regressions -----------------
+# 3. Add Dummies ---------------------------------------------------------------
 sigma = 8
+
+create_dummies <- function(data){
+  data <- dummy_cols(data, select_columns = "country.1")
+  column.dummy.start <- min(grep("country.1.", names(data)))
+  
+  names(data)[column.dummy.start:ncol(data)] <- substr(names(data)[column.dummy.start:ncol(data)], 11,13)
+  #TRAINS.sym$ZWE <- 0 #correct for last country in country.2
+  for(i in column.dummy.start:ncol(data)){ # create dummies and add both countries
+    data[,i] <- ifelse((data[, "country.1"] == names(data)[i]) |
+                         (data[, "country.2"] == names(data)[i]), 1,0)
+  }
+  data <- dummy_cols(data, select_columns = "year")
+  return(data)
+}
+
+
 ## TRAINS -----------
 TRAINS.sym <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
 TRAINS.zero.countries <- read.csv(paste0(path.data.reg, "TRAINS_non_zero_countries.csv"))
 TRAINS.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "TRAINS_Measurement_index.xlsx"))
 TRAINS.sym <- merge(TRAINS.sym, TRAINS.measurement, by = c("country.1", "country.2", "year", "chapter"))
-
-
 TRAINS.sym <- TRAINS.sym %>% 
   filter(chapter == "D")
 
+## GTA -----------
+GTA.sym <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
+GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
+GTA.sym <- merge(GTA.sym, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
+GTA.zero.countries <- read.csv(paste0(path.data.reg, "GTA_non_zero_countries.csv"))
 
-TRAINS.sym <- dummy_cols(TRAINS.sym, select_columns = "country.1")
-column.dummy.start <- min(grep("country.1.", names(TRAINS.sym)))
 
-names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)] <- substr(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], 11,13)
-#TRAINS.sym$ZWE <- 0 #correct for last country in country.2
-for(i in column.dummy.start:ncol(TRAINS.sym)){ # create dummies and add both countries
-  TRAINS.sym[,i] <- ifelse((TRAINS.sym[, "country.1"] == names(TRAINS.sym)[i]) |
-                          (TRAINS.sym[, "country.2"] == names(TRAINS.sym)[i]), 
-                        1,0)
+TRAINS.sym <- create_dummies(TRAINS.sym)
+TRAINS.sym.delta <- create_dummies(TRAINS.sym.delta)
+GTA.sym <- create_dummies(GTA.sym)
+GTA.sym.delta <- create_dummies(GTA.sym.delta)
+
+
+
+# 4. Regressions ---------------------------------------------------------------
+
+library(sampleSelection)
+detach("package:goft")
+detach("package:fitdistrplus")
+detach("package:MASS")
+
+run_regression <- function(data,type = "lm", 
+                           dependant = "tij", 
+                           controls, 
+                           dependant.selection = "is.available", 
+                           controls.selection){
+  
+  if(type == "lm"){
+    reg <- paste0("lm(data = data,", dependant, " ~", controls, ")")
+  }
+  
+  if(type == "heckman"){
+    
+    reg <- paste0("selection(", dependant.selection, "~", controls.selection, ",", 
+                                dependant,           "~", controls.selection, 
+                  "method = '2step', data = data)")
+  }
+  
+  reg <- paste0("output <- ", reg)
+  eval(parse(text = reg))
+  return(output)
 }
 
+reg <- run_regression(GTA.sym, controls = "log(distw_harmonic)")
+fe <- paste0(names(GTA.sym)[(column.dummy.start+8):ncol(GTA.sym)], collapse = "+" )
+controls <- "total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean"
 
-
+reg_fe <- run_regression(GTA.sym, controls = paste0(controls,"+", fe)); summary(reg_fe)
 
 
 ### Linreg -------------------------------------------------------------------------
-# ADD TIME FIXED EFFECTS -------------------------
 #normal
 linreg <- lm(data = TRAINS.sym, tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
 summary(linreg)

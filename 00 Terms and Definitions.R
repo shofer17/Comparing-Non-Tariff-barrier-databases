@@ -8,6 +8,7 @@ library(gtalibrary)
 
 years <- 2005:2019
 base <- 2005:2007
+years.observation <- 2009:2019
 gta_colour_palette()
 
 # Paths
@@ -77,3 +78,5 @@ grid <- grid %>%
   filter(country.2 != country.1)
 
 grid <- unique(to_alphabeta(grid, "country.1", "country.2"))
+grid.observed <- grid %>% 
+  filter(year %in% years.observation)

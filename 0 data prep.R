@@ -125,14 +125,14 @@ TRAINS$date.implemented[is.na(TRAINS$date.implemented)] <- "1900-01-01" #NAs com
 TRAINS <- TRAINS %>% 
   mutate(date.removed = as.numeric(year(date.removed)))%>%
   mutate(date.implemented = as.numeric(year(date.implemented)))%>%
-  filter(is.na(date.removed) | date.removed > min(years)) %>%
-  filter(!date.implemented < min(years)) %>%
-  filter(is.na(date.implemented) | date.implemented <= max(years)) %>% #remove interventions that are out of range
-  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
-                               max(years),
+  filter(is.na(date.removed) | date.removed > min(years.observation)) %>%
+  filter(!date.implemented < min(years.observation)) %>%
+  filter(is.na(date.implemented) | date.implemented <= max(years.observation)) %>% #remove interventions that are out of range
+  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years.observation),
+                               max(years.observation),
                                date.removed)) %>% #set everything to 2019 that is after that or has no removal date
-  mutate(date.implemented = ifelse(date.implemented < min(years), 
-                                   min(years), 
+  mutate(date.implemented = ifelse(date.implemented < min(years.observation), 
+                                   min(years.observation), 
                                    date.implemented)) #set everything before 2009 to 2009
 
 # get all in force years in a string
@@ -328,12 +328,15 @@ TRAINS$iso_code <- NULL
 TRAINS <- to_iso(TRAINS, "implementing.jurisdiction", "affected.jurisdiction")
 TRAINS <- to_alphabeta(TRAINS, "implementing.jurisdiction", "affected.jurisdiction")
 
+TRAINS <- TRAINS %>%
+  filter(implementing.jurisdiction %in% selected.countries & affected.jurisdiction %in% selected.countries)
+
 TRAINS <- unique(cSplit(TRAINS, "chapter", direction = "long"))
 TRAINS <- unique(cSplit(TRAINS, "years.in.force", direction = "long"))
 
 data.out <- data.frame()
 
-for(i in years){ #aggregate by year to ease computational burden
+for(i in years.observation){ #aggregate by year to ease computational burden
   data.loop <- TRAINS %>% filter(years.in.force == i)
   
   data.loop <- aggregate(data = data.loop, measure.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
@@ -355,10 +358,10 @@ data.out[is.na(data.out)] <- 0
 data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
 
 # add pairs with 0 interventions associated
-grid$chapter <- as.character(grid$chapter)
+grid.observed$chapter <- as.character(grid.observed$chapter)
 # test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
 # nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
-data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
+data.out <- merge(grid.observed, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
 data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 
@@ -421,14 +424,14 @@ WTO <- WTO %>%
   select(-termin.p.partner)
 
 # only get active measures during observation period
-WTO <- WTO%>%filter((is.na(date.removed)|date.removed < as.Date(paste0(max(years), "-12-31"))) &
-                      date.implemented > as.Date(paste0(min(years), "-01-01"))&
-                      date.implemented < as.Date(paste0(max(years), "-12-31")))
+WTO <- WTO%>%filter((is.na(date.removed)|date.removed < as.Date(paste0(max(years.observation), "-12-31"))) &
+                      date.implemented > as.Date(paste0(min(years.observation), "-01-01"))&
+                      date.implemented < as.Date(paste0(max(years.observation), "-12-31")))
 
 
 WTO$date.implemented <- year(WTO$date.implemented)
 WTO$date.removed <- ifelse(is.na(WTO$date.removed) | 
-                             WTO$date.removed > max(years), max(years), WTO$date.removed)
+                             WTO$date.removed > max(years.observation), max(years.observation), WTO$date.removed)
 
 WTO$years.in.force <- apply(WTO[, c("date.implemented", "date.removed")], 1, FUN = function(x) paste0(seq(x[1],max(x)), collapse = ","))
 WTO <- WTO %>% select(-c(date.implemented, date.removed))
@@ -561,13 +564,13 @@ GTA$date.implemented[is.na(GTA$date.implemented)] <- "1900-01-01" #NAs come from
 GTA <- GTA %>% 
   mutate(date.removed = as.numeric(year(date.removed)))%>%
   mutate(date.implemented = as.numeric(year(date.implemented)))%>%
-  filter(is.na(date.removed) | date.removed > min(years)) %>%
-  filter(is.na(date.implemented) | date.implemented < max(years)) %>% #remove interventions that are out of range
-  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years),
-                               max(years),
+  filter(is.na(date.removed) | date.removed > min(years.observation)) %>%
+  filter(is.na(date.implemented) | date.implemented < max(years.observation)) %>% #remove interventions that are out of range
+  mutate(date.removed = ifelse(is.na(date.removed) | date.removed > max(years.observation),
+                               max(years.observation),
                                date.removed)) %>% #set everything to 2019 that is after that or has no removal date
-  mutate(date.implemented = ifelse(date.implemented < min(years), 
-                                   min(years), 
+  mutate(date.implemented = ifelse(date.implemented < min(years.observation), 
+                                   min(years.observation), 
                                    date.implemented)) #set everything before 2009 to 2009
 
 # get all in force years in a strint
@@ -623,7 +626,7 @@ GTA <- unique(cSplit(GTA, "years.in.force", direction = "long"))
 
 data.out <- data.frame()
 
-for(i in years){
+for(i in years.observation){
   data.loop <- GTA %>% filter(years.in.force == i)
   
   data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
@@ -647,7 +650,7 @@ data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
 # test <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T, all.y = T)
 # nrow(grid)- nrow(data.out) + sum(is.na(data.out$number.of.interventions)) == sum(is.na(test$number.of.interventions))
 # add pairs with 0 interventions associated
-data.out <- merge(grid, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T)
+data.out <- merge(grid.observed, data.out, by = c("country.1", "country.2", "year","chapter"), all.x = T)
 data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 saveRDS(data.out, file = paste0(path.data.out, 
