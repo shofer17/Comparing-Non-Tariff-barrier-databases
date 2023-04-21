@@ -183,10 +183,11 @@ run_regression <- function(data,type = "lm",
                            dependant = "tij", 
                            controls, 
                            dependant.selection = "is.available", 
-                           controls.selection){
+                           controls.selection,
+                           weights = NULL){
   
   if(type == "lm"){
-    reg <- paste0("lm(data = data,", dependant, " ~", controls, ")")
+    reg <- paste0("lm(data = data,", dependant, " ~", controls, ", weights = ",weights,")")
   }
   
   if(type == "heckman"){
@@ -201,44 +202,24 @@ run_regression <- function(data,type = "lm",
   return(output)
 }
 
-reg <- run_regression(GTA.sym, controls = "log(distw_harmonic)")
 fe <- paste0(names(GTA.sym)[(column.dummy.start+8):ncol(GTA.sym)], collapse = "+" )
-controls <- "total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean"
-
-reg_fe <- run_regression(GTA.sym, controls = paste0(controls,"+", fe)); summary(reg_fe)
-
+controls <- "total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff"
+CRI <- "coverage.mean"
+mast.chapters <- paste0(selected.mast[!selected.mast %in% "N"], collapse = "+")
+controls.per.chapter <- paste0(mast.chapters, "+", "log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean")
 
 ### Linreg -------------------------------------------------------------------------
 #normal
-linreg <- lm(data = TRAINS.sym, tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean)
-summary(linreg)
-
-#fixed effects
-linreg.fixed <- "linreg.fixed <- lm(data = TRAINS.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
-linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),")")
-eval(parse(text = linreg.fixed))
-summary(linreg.fixed)
-
-
-#FE + interventions per chapter
-linreg.fixed <- "linreg.fixed <- lm(data = TRAINS.sym, tij ~ B + C + D + E + F + G + P + N + I + L + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff + coverage.mean "
-linreg.fixed <- paste0(linreg.fixed,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),")")
-eval(parse(text = linreg.fixed))
-summary(linreg.fixed)
+ols <- run_regression(GTA.sym, controls = paste0(controls)); summary(ols)
+ols.fe <- run_regression(GTA.sym, controls = paste0("total +", fe)); summary(ols.fe)
+ols.per.chapter <- run_regression(GTA.sym, controls = controls.per.chapter); summary(ols.per.chapter)
+ols.fe.per.chapter <- run_regression(GTA.sym, controls = paste0(controls.per.chapter,"+", fe)); summary(ols.fe.per.chapter)
 
 ### Linreg (weighted) -------------------------------------------------------------------------
 
-#geom mean
-linreg.weighted.geom <- lm(data = TRAINS.sym, 
-                           tij ~ total  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff, 
-                           weights = coverage.geom.mean)
-summary(linreg.weighted.geom)
+ols.w <- run_regression(GTA.sym, controls = controls, weights = "coverage.geom.mean"); summary(ols.w)
+ols.fe.w <- run_regression(GTA.sym, controls = paste0(controls,"+", fe), weights = "coverage.geom.mean"); summary(ols.fe.w)
 
-
-linreg.weighted.fixed.geom <- "linreg.weighted.fixed.geom <- lm(data = TRAINS.sym, tij ~ total + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff "
-linreg.weighted.fixed.geom <- paste0(linreg.weighted.fixed.geom,"+", paste0(names(TRAINS.sym)[column.dummy.start:ncol(TRAINS.sym)], collapse = "+" ),", weights = coverage.geom.mean)")
-eval(parse(text = linreg.weighted.fixed.geom))
-summary(linreg.weighted.fixed.geom)
 
 
 #arith mean
