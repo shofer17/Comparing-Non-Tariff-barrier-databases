@@ -10,7 +10,7 @@ years <- 2005:2019
 base <- 2005:2007
 years.observation <- 2009:2019
 gta_colour_palette()
-
+evaluation <- c("harmful", "liberalising")
 # Paths
 path.data.raw <- "1 data/0 data raw/"
 path.data.out <- "1 data/1 data processed/"
@@ -20,6 +20,7 @@ path.plot <- "2 plots/"
 # available countries and MAST
 selected.countries <- read.csv(file = paste0(path.data.out, "selected countries.csv"))$x
 selected.mast <- read.csv(file = paste0(path.data.out, "selected MAST chapters.csv"))$x
+selected.mast.red <- selected.mast[!selected.mast %in% c("N")]
 
 
 
@@ -80,3 +81,4 @@ grid <- grid %>%
 grid <- unique(to_alphabeta(grid, "country.1", "country.2"))
 grid.observed <- grid %>% 
   filter(year %in% years.observation)
+

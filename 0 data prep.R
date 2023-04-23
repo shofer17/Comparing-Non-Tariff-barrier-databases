@@ -552,10 +552,11 @@ saveRDS(WTO, file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 gta_data_slicer(data.path = paste0(path.data.raw, "master_plus.Rdata"))
 
 GTA <- master.sliced %>% 
-  filter(gta.evaluation != "Green" & !is.na(a.un))%>%
+  filter( !is.na(a.un))%>%
   mutate(mast.chapter = as.character(mast.chapter))%>%
   filter(mast.chapter %in% selected.mast) %>%
-  select(-c(a.un, i.un, title, date.announced, affected.sector, i.atleastone.G20, a.atleastone.G20))
+  select(-c(a.un, i.un, title, date.announced, affected.sector, i.atleastone.G20, a.atleastone.G20)) %>%
+  mutate(gta.evaluation = ifelse(gta.evaluation == "Green", "liberalising", "harmful"))
 
 GTA <- to_iso(GTA, "implementing.jurisdiction", "affected.jurisdiction")
 GTA <- GTA %>% filter(implementing.jurisdiction %in% selected.countries & affected.jurisdiction %in% selected.countries)
@@ -629,21 +630,24 @@ data.out <- data.frame()
 for(i in years.observation){
   data.loop <- GTA %>% filter(years.in.force == i)
   
-  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
+  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter + gta.evaluation, FUN = function(x) length(unique(x)))
   
   data.out <- rbind(data.out, data.loop)
 }
 
-names(data.out) <- c("country.1", "country.2", "year","chapter","mast.chapter",  "number.of.interventions")
+names(data.out) <- c("country.1", "country.2", "year","chapter","mast.chapter", "gta.evaluation", "number.of.interventions")
 
-data.out <- pivot_wider(data.out, id_cols = 1:4, names_from = "chapter", values_from = "number.of.interventions")
-data.out$AB <- ifelse(is.na(data.out$AB), 0, data.out$AB)
-data.out$D <- ifelse(is.na(data.out$D), 0, data.out$D)
-data.out$GTT <- data.out$AB + data.out$D
-data.out <- pivot_longer(data.out, cols = 5:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
-data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "mast.chapter", values_from = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2","mast.chapter", "year","gta.evaluation"), names_from = "chapter", values_from = "number.of.interventions")
 data.out[is.na(data.out)] <- 0
-data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
+data.out$GTT <- data.out$AB + data.out$D
+data.out <- pivot_longer(data.out, cols = 6:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
+
+
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter", "gta.evaluation"), names_from = c("mast.chapter"), values_from = "number.of.interventions")
+data.out[is.na(data.out)] <- 0
+data.out$total <- apply(data.out[,6:ncol(data.out)],1,FUN = sum)
+data.out <- pivot_longer(data.out, cols = 6:ncol(data.out), names_to = "mast.chapter", values_to = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = c("mast.chapter", "gta.evaluation"), values_from = "number.of.interventions")
 
 
 
@@ -655,11 +659,6 @@ data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 saveRDS(data.out, file = paste0(path.data.out, 
                                 "GTA_symmetric_isic.RData"))
-
-
-
-
-
 
 
 
