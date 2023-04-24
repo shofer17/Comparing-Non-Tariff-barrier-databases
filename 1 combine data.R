@@ -95,7 +95,7 @@ TRAINS.sym <- merge(TRAINS.sym, trade.costs,
 
 
 # pivot longer to get delta
-TRAINS.sym.delta <-TRAINS.sym %>% 
+TRAINS.sym.delta <- TRAINS.sym %>% 
   pivot_longer(cols = 5:ncol(TRAINS.sym), names_to = "variable", values_to = "value")
 
 # join values and get delta
@@ -220,7 +220,7 @@ TRAINS.sym <- create_dummies(TRAINS.sym)
 TRAINS.sym.delta <- create_dummies(TRAINS.sym.delta)
 GTA.sym <- create_dummies(GTA.sym)
 GTA.sym.delta <- create_dummies(GTA.sym.delta)
-
+GTA.sym.delta.heck <- create_dummies(GTA.sym.delta.heck)
 
 
 
@@ -289,8 +289,24 @@ heckit <- run_regression(GTA.sym, type = "heckman", controls = paste0(controls, 
 heckit.fe <- run_regression(GTA.sym, type = "heckman", controls = paste0(controls,"+",paste0(fe.vec[24:length(fe.vec)], collapse = "+"), "+ coverage.geom.mean"), controls.selection = paste0(controls,  " + exports")); summary(heckit.fe)
 
 heckit.delta <- run_regression(GTA.sym, type = "heckman", controls = paste0(controls.delta), controls.selection = paste0(controls,  " + exports")); summary(heckit.delta)
-heckit.delta <- run_regression(GTA.sym.delta.heck, type = "heckman", controls = paste0(controls.delta), controls.selection = paste0(controls.heck,  " + exports")); summary(heckit.delta)
+heckit.delta <- run_regression(GTA.sym.delta.heck, type = "heckman", controls = paste0(controls.delta ,"+", fe), controls.selection = paste0(controls.heck,  " + exports")); summary(heckit.delta)
 
+fe.vec <- fe.vec[!fe.vec %in% c("CUB", "MMR", "year_2019")]
+fe.vec[i]
+for(i in 100:length(fe.vec)){
+  t <- try(eval(parse(text = paste0("selection(data = GTA.sym.delta.heck, selection = is.available ~ ", controls.heck, "+ exports, tij ~total_harmful + total_liberalising+", paste0(fe.vec[1:i], collapse = "+"), ", method = '2step')"))))
+   
+  if(!inherits(t, "try-error")){
+    print(i)
+  } else{
+    cat("Error occurred when removing variable ", vars[i], "\n")
+    beep(sound = 2)
+  }
+}
+beep(sound = 2)
+
+library(beepr)
+selection(data = GTA.sym.delta.heck, selection = is.available,)
 
 for (i in 1:length(vars)) {
   reducedmodel <- try(update(selection(data = GTA.sym.delta, selection = is.available ~ eval(parse(text = controls)), tij ~ fe.vec[i])))
