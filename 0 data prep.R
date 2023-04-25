@@ -774,6 +774,32 @@ IMF.FX <- IMF.FX %>%
   select(ISO, value, month) %>%
   left_join(IMF.FX, by = "month")
 
+IMF.FX <- IMF.FX %>%
+  filter(ISO.x != ISO.y)%>%
+  mutate(rate = log(value.x/value.y))%>%
+  select(-c(value.x, value.y, Country.1)) %>%
+  mutate(group = paste0(ISO.x, "_", ISO.y)) %>%
+  select(-c(ISO.x, ISO.y, year))
+
+library(dplyr)
+library(zoo)
+
+IMF.FX <- IMF.FX %>%
+  group_by(group) %>%
+  mutate(moving_avg = rollmean(rate, k = 3, fill = NA, align = 'right'),
+         moving_sd = rollapply(rate, width = 3, FUN = sd, fill = NA, align = 'right'))  %>% 
+  mutate(year = substr(month, 5,8))%>%
+  group_by(year, group)%>%
+  summarise(avg_moving_sd = mean(moving_sd, na.rm = TRUE))
+
+IMF.FX <- cSplit(test, "group", sep = "_", direction = "wide")
+names(IMF.FX) <- c("year", "sd", "Country.1", "Country.2")
+
+IMF.FX <- to_alphabeta(t, "Country.1", "Country.2")
+IMF.FX$sd <- round(t$sd, 4)
+IMF.FX <- unique(IMF.FX)
+
+
 
 
 ## CEPII Gravity controls ------------------------------------------------------
