@@ -746,6 +746,36 @@ UNCTAD.LSCI$GTA.name <- NULL
 
 rm(t, TRAINS.to.GTA.names)
 
+## IMF Exchange rate volatitilty ---------------
+
+IMF.FX <- readxl::read_xlsx(paste0(path.data.raw, "IMF_Exchange_rates_vs_USD.xlsx"), skip = 1)
+IMF.FX <- IMF.FX %>%
+  rename("Country.1" = "...1")%>%
+  select(-...2)%>%
+  pivot_longer(cols = 2:(ncol(IMF.FX)-1), values_to = "value", names_to = "month")%>%
+  mutate(year = substr(month, 5,8)) %>%
+  filter(year %in% years)
+
+IMF.correspondance <- read.csv2(file = paste0(path.data.raw, "IMF_ISO_correspondance.csv")) # correspondance from Bing-Chat (GPT-4)
+EU <- country.names[country.names$is.eu, c("name", "iso_code")] %>%
+  select(-name)%>%
+  mutate(Country.1 = "Euro Area")%>%
+  rename("ISO" = "iso_code")
+
+IMF.correspondance <- rbind(IMF.correspondance, EU, c("Côte d'Ivoire", "CIV"))
+
+IMF.FX <- IMF.FX %>%
+  left_join(IMF.correspondance, by = "Country.1", multiple = "all")
+
+t <- unique(IMF.FX[is.na(IMF.FX$ISO), "Country.1"]) #cust Cuba missing and it is not part of IMF
+t <- selected.countries[!selected.countries %in% IMF.FX$ISO]
+
+IMF.FX <- IMF.FX %>%
+  select(ISO, value, month) %>%
+  left_join(IMF.FX, by = "month")
+
+
+
 ## CEPII Gravity controls ------------------------------------------------------
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
 CEPII.landlocked <- cepiigeodist::geo_cepii[, c("iso3", "landlocked")] ## Landlocked

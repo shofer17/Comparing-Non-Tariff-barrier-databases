@@ -293,7 +293,7 @@ heckit.delta <- run_regression(GTA.sym.delta.heck, type = "heckman", controls = 
 
 fe.vec <- fe.vec[!fe.vec %in% c("CUB", "MMR", "year_2019")]
 fe.vec[i]
-for(i in 100:length(fe.vec)){
+for(i in 1:length(fe.vec)){
   t <- try(eval(parse(text = paste0("selection(data = GTA.sym.delta.heck, selection = is.available ~ ", controls.heck, "+ exports, tij ~total_harmful + total_liberalising+", paste0(fe.vec[1:i], collapse = "+"), ", method = '2step')"))))
    
   if(!inherits(t, "try-error")){
