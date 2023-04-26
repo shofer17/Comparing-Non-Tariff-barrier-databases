@@ -109,7 +109,7 @@ TRAINS <- TRAINS %>% select(-c(official.title.original.language, # For explanati
                                measure.description.original.language,    # 2 cases
                                measure.objective,                        # 5 cases
                                #description                               # 1039 cases: e.g. Wood-based packaging materials and packages are subject to heat treatment vs. Wood-based packaging materials and packages shall be specifically stamped
-                               ))
+))
 #test <- TRAINS[duplicated(TRAINS),]
 
 TRAINS <- unique(TRAINS)
@@ -311,7 +311,7 @@ TRAINS <- TRAINS %>%
 writexl::write_xlsx(TRAINS, path = paste0(path.data.out, 
                                           "TRAINS_asymmetric_isic.xlsx"))
 saveRDS(TRAINS, file = paste0(path.data.out, 
-                                   "TRAINS_asymmetric_isic.RData"))
+                              "TRAINS_asymmetric_isic.RData"))
 
 rm(TRAINS.to.GTA.names, converted.chapter, trains, TRAINS, test, world.conversion, world.conversion.2, converted.affected)
 
@@ -366,14 +366,14 @@ data.out[, 5:ncol(data.out)][is.na(data.out[, 5:ncol(data.out)])] <- 0
 
 
 saveRDS(data.out, file = paste0(path.data.out, 
-                              "TRAINS_symmetric_isic.RData"))
+                                "TRAINS_symmetric_isic.RData"))
 
 
 rm(TRAINS, data.loop, data.out)
 # 3. WTO TMDB ----------------------------------------------------------------
 ## Load -------------
 WTO <- readxl::read_xlsx(path = paste0(path.data.raw, 
-                                "WTO_NTMs_Trade_Monitoring_Database.xlsx"))
+                                       "WTO_NTMs_Trade_Monitoring_Database.xlsx"))
 wto.names.to.iso <- readxl::read_xlsx(path = paste0(path.data.out, 
                                                     "WTO ISO conversions.xlsx"))
 isic.chapters <- readxl::read_xlsx(path = paste0(path.data.out, 
@@ -416,11 +416,11 @@ WTO <- WTO %>%
   mutate(date.removed = as.Date(date.removed))%>%
   mutate(termin.p.partner = as_date(termin.p.partner, format = '%d/%m/%Y'))%>%
   mutate(date.removed = if_else(!is.na(termin.p.partner), 
-                              termin.p.partner, 
-                              date.removed))%>%
+                                termin.p.partner, 
+                                date.removed))%>%
   mutate(affected.jurisdiction = gsub(pattern = " \\((.*)\\)",
-                                   replacement = "",
-                                   affected.jurisdiction))%>%
+                                      replacement = "",
+                                      affected.jurisdiction))%>%
   select(-termin.p.partner)
 
 # only get active measures during observation period
@@ -490,14 +490,14 @@ WTO <- WTO %>%
 
 ## Save
 writexl::write_xlsx(WTO, path = paste0(path.data.out, 
-                                          "WTO_asymmetric_isic.xlsx"))
+                                       "WTO_asymmetric_isic.xlsx"))
 saveRDS(WTO, file = paste0(path.data.out, 
-                              "WTO_asymmetric_isic.RData"))
+                           "WTO_asymmetric_isic.RData"))
 
 rm(countries.iso, hs.to.isic, WTO.to.GTA.names, converted.chapter, WTO, WTO, test, WTO.2, WTO.4, WTO.6, WTO.62)
 
 WTO <- readRDS(paste0(path.data.out, 
-               "WTO_asymmetric_isic.RData"))
+                      "WTO_asymmetric_isic.RData"))
 
 
 
@@ -511,11 +511,11 @@ WTO <- WTO[!is.na(WTO$affected.jurisdiction) & !is.na(WTO$implementing.jurisdict
 WTO$implementing.jurisdiction.backup <- WTO$implementing.jurisdiction
 
 WTO$implementing.jurisdiction <- ifelse(WTO$implementing.jurisdiction < WTO$affected.jurisdiction, 
-                       WTO$implementing.jurisdiction, 
-                       WTO$affected.jurisdiction)
+                                        WTO$implementing.jurisdiction, 
+                                        WTO$affected.jurisdiction)
 WTO$affected.jurisdiction <- ifelse(WTO$affected.jurisdiction > WTO$implementing.jurisdiction.backup, 
-                      WTO$affected.jurisdiction, 
-                      WTO$implementing.jurisdiction.backup)
+                                    WTO$affected.jurisdiction, 
+                                    WTO$implementing.jurisdiction.backup)
 WTO$implementing.jurisdiction.backup <- NULL
 
 WTO <- cSplit(WTO, "chapter", direction = "long")
@@ -547,7 +547,7 @@ saveRDS(WTO, file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 
 #WTO <- readRDS(file = paste0(path.data.out, "WTO_symmetric_isic.RData"))
 
- # 4. GTA -----------------------------------------------------------------------
+# 4. GTA -----------------------------------------------------------------------
 
 gta_data_slicer(data.path = paste0(path.data.raw, "master_plus.Rdata"))
 
@@ -611,9 +611,9 @@ GTA <- GTA %>%
 
 ## Save
 writexl::write_xlsx(GTA, path = paste0(path.data.out, 
-                                          "GTA_asymmetric_isic.xlsx"))
+                                       "GTA_asymmetric_isic.xlsx"))
 saveRDS(GTA, file = paste0(path.data.out, 
-                              "GTA_asymmetric_isic.RData"))
+                           "GTA_asymmetric_isic.RData"))
 
 
 ## aggregate --------
@@ -680,7 +680,7 @@ for(i in 1:num.sheets){
     select(Code, score...3) %>%
     mutate(year = names.sheets[i])
   data.out <- rbind(WB.lpi, data.out)
-
+  
 }
 
 WB.lpi <- pivot_wider(data.out, names_from = "year", values_from = "score...3")
@@ -803,7 +803,7 @@ IMF.FX <- test
 IMF.FX <- cSplit(IMF.FX, "group", sep = "_", direction = "wide")
 IMF.FX <- IMF.FX %>%
   filter(group_1 %in% selected.countries &
-         group_2 %in% selected.countries)
+           group_2 %in% selected.countries)
 names(IMF.FX) <- c("year", "FXV", "Country.1", "Country.2")
 
 ## CEPII Gravity controls ------------------------------------------------------
@@ -859,12 +859,27 @@ exports <- exports %>%
   filter(Year %in% years) %>%
   left_join(country.names[, c("name", "iso_code")], by = c("Reporter.jurisdiction" =  "name")) 
 exports$Reporter.jurisdiction <- NULL
+exports.share <- exports
+
+names(exports.share) <- c("year", "Exports", "Country.1")
+controls.help <- controls %>%
+  select(year, country_id_d, gdp_d) %>%
+  filter(country_id_d %in% selected.countries) %>%
+  unique()%>%
+  filter(year %in% years) %>%
+  rename("Country.1" = "country_id_d", "GDP" = "gdp_d") %>%
+  left_join(exports.share, by = c("year", "Country.1"))
+controls.help <- controls.help %>% 
+  mutate(GDP = GDP * 1000)%>%
+  mutate(Share = Exports/GDP)
+
+saveRDS(controls.help, file = paste0(path.data.out, "Export_share.Rds"))
 
 
 controls <- controls %>% 
   left_join(exports, by = c("country_id_o" = "iso_code", "year" = "Year")) %>%
   rename( "exports_o" = "Value") %>%
-left_join(exports, by = c("country_id_d" = "iso_code", "year" = "Year")) %>%
+  left_join(exports, by = c("country_id_d" = "iso_code", "year" = "Year")) %>%
   rename( "exports_d" = "Value")
 
 controls <- controls %>% #get intranational trade flows by substracting exports from GDP
@@ -875,7 +890,7 @@ controls <- controls %>% #get intranational trade flows by substracting exports 
 controls <- controls %>% 
   filter(substr(country_id_o, nchar(country_id_o), nchar(country_id_o)) != 1 & #old countries have missing values
            substr(country_id_d, nchar(country_id_d), nchar(country_id_d)) != 1 
-           )
+  )
 
 #make controlls bilateral
 controls$landlocked <- ifelse(controls$landlocked_d == 1 | 

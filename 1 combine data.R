@@ -50,42 +50,23 @@ base.years <- base.years %>%
   pivot_longer(cols = 5:ncol(base.years), names_to = "variable", values_to = "value") %>% 
   select(-year)
 
-## WTO -----------------
-# WTO.sym$chapter <- as.character(WTO.sym$chapter)
-# WTO.sym$chapter <- ifelse(WTO.sym$chapter == "A", "AB", WTO.sym$chapter)
-# 
-# WTO.sym <- merge(WTO.sym, controls,
-#                  by.x = c("ISO_country.1", "ISO_country.2", "year"), 
-#                  by.y = c("country_id_o", "country_id_d", "year"))
-# 
-# 
-# trade.costs$is.cost <- 1
-# WTO.sym <- merge(WTO.sym, trade.costs[, c("country.1", "country.2", "year", "chapter", "tij", "is.cost")], 
-#                     by.x = c("ISO_country.1", "ISO_country.2", "year", "chapter"),
-#                     by.y = c("country.1", "country.2", "year", "chapter"), 
-#                     all.x = T)
-# 
-# any(!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter))
-# test <- unique(WTO.sym$ISO_country.1)
-# test <- test[!unique(WTO.sym$ISO_country.1) %in% unique(trade.costs$reporter)]
-# 
-# test <- as.numeric(na.omit(trade.costs$tij))
-# hist(trade.costs$tij, breaks = 100)
-# ev_test(na.omit(trade.costs$tij))
-# descdist(test, discrete = F)
-
 ## TRAINS ----------------------------------------------------------------------
 
-TRAINS.sym <- cbind(TRAINS.sym, matrix(nrow = nrow(TRAINS.sym), ncol = length(selected.mast.red)+1, data = 0))
+selected.mast[!selected.mast %in% names(TRAINS.sym)]
+TRAINS.sym <- TRAINS.sym %>% 
+  select(names(TRAINS.sym)[names(TRAINS.sym) %in% c(names(grid),"total", selected.mast)])%>%
+  mutate(M = 0) %>%
+  relocate(any_of(c(names(grid), selected.mast, "total")))
+names(TRAINS.sym) <- c(names(grid), paste0( c(selected.mast, "total"), "_harmful"))
 
-names(TRAINS.sym) <- c(names(TRAINS.sym)[1:4], paste0(c(selected.mast.red, "total"), "_harmful"),paste0(c(selected.mast.red, "total"), "_liberalising") )
-names(TRAINS.sym)[!names(TRAINS.sym) %in% names(GTA.sym)]
-names(GTA.sym)[!names(GTA.sym) %in% names(TRAINS.sym)]
+liberalising <- data.frame(matrix(nrow = nrow(TRAINS.sym), ncol = length(selected.mast.red)+1, data = 0))
+names(liberalising) <- c(paste0(c(selected.mast, "total"), "_liberalising"))
+TRAINS.sym <- cbind(TRAINS.sym, liberalising)
 
 
 TRAINS.sym <- merge(TRAINS.sym, controls,
-                 by = c("country.1", "country.2", "year", "chapter"), 
-                 all.x = T)
+                    by = c("country.1", "country.2", "year", "chapter"), 
+                    all.x = T)
 
 
 trade.costs$is.cost <- 1
@@ -108,9 +89,12 @@ TRAINS.sym.delta <- TRAINS.sym.delta %>%
 
 ##GTA --------------------------------------------------------------------------
 
+names(TRAINS.sym)[!names(TRAINS.sym) %in% names(GTA.sym)]
+names(GTA.sym)[!names(GTA.sym) %in% names(TRAINS.sym)]
+
 GTA.sym <- merge(GTA.sym, controls,
-                    by = c("country.1", "country.2", "year", "chapter"), 
-                    all.x = T)
+                 by = c("country.1", "country.2", "year", "chapter"), 
+                 all.x = T)
 
 trade.costs$is.cost <- 1
 GTA.sym.delta <- GTA.sym
@@ -162,7 +146,7 @@ create_dummies <- function(data){
 TRAINS.sym <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
 TRAINS.zero.countries <- read.csv(paste0(path.data.reg, "TRAINS_non_zero_countries.csv"))
 TRAINS.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "TRAINS_Measurement_index.xlsx"))
-TRAINS.sym <- merge(TRAINS.sym, TRAINS.measurement, by = c("country.1", "country.2", "year", "chapter"))
+TRAINS.sym <- merge(TRAINS.sym, TRAINS.measurement, by = c("country.1", "country.2", "year", "chapter"), all.x = T)
 TRAINS.sym <- TRAINS.sym %>% 
   filter(chapter == "D")
 
@@ -207,7 +191,9 @@ TRAINS.sym.delta <- TRAINS.sym.delta %>%
   mutate(tij.heck = ifelse(is.na(tij), 0, tij)) # make all elements that are not availabe 0
 
 TRAINS.sym.heck <- TRAINS.sym %>% 
+  filter(chapter == "D")%>%
   select(controls.vec)
+
 
 names(TRAINS.sym.heck) <- paste0("base_", names(TRAINS.sym.heck))
 TRAINS.sym.delta.heck <- cbind(TRAINS.sym.delta,TRAINS.sym.heck )
@@ -244,7 +230,7 @@ run_regression <- function(data,type = "lm",
   if(type == "heckman"){
     
     reg <- paste0("selection(", dependant.selection, "~", controls.selection, ",", 
-                                dependant,           "~", controls, ",",
+                  dependant,           "~", controls, ",",
                   "method = '2step', data = data)")
   }
   
@@ -295,7 +281,7 @@ fe.vec <- fe.vec[!fe.vec %in% c("CUB", "MMR", "year_2019")]
 fe.vec[i]
 for(i in 1:length(fe.vec)){
   t <- try(eval(parse(text = paste0("selection(data = GTA.sym.delta.heck, selection = is.available ~ ", controls.heck, "+ exports, tij ~total_harmful + total_liberalising+", paste0(fe.vec[1:i], collapse = "+"), ", method = '2step')"))))
-   
+  
   if(!inherits(t, "try-error")){
     print(i)
   } else{
@@ -322,6 +308,28 @@ heckit.delta.fe <- run_regression(GTA.sym, type = "heckman", controls = paste0("
 detach("package:goft")
 detach("package:fitdistrplus")
 detach("package:MASS")
+
+# 5. Other tests ----------------------------------------------------------------
+#not exports but share of exports (or exports vs intranational)
+#Also, not bilateral
+export.share <- readRDS(file = paste0(path.data.out, "Export_share.Rds"))
+ntms <- readRDS(file = paste0(path.data.out, "GTA_interventions.Rds"))
+ntms <- ntms %>% 
+  filter(chapter == "GTT") %>%
+  left_join(export.share, by = c("years.in.force" = "year", "implementing.jurisdiction" = "Country.1"))
+ntms <- ntms %>%
+  select(years.in.force, implementing.jurisdiction, intervention.id, Share)%>%
+  rename("Country.1" = "implementing.jurisdiction")
+t <- dummy_cols(ntms, "Country.1")
+names(t)[5:ncol(t)] <- gsub("Country.1_", "", names(t)[5:ncol(t)])
+
+fe.t <- paste0(fe.vec[!fe.vec %in% c("CMR", "COM", "CPV", "CUB", "GAB", "GEO", "GIN", "LAO", "LBN", "LBR", "MOZ", "MUS")], collapse = "+")
+fe.t <- fe.vec[fe.vec %in% selected.countries]
+fe.t <- paste0(fe.t[!fe.t %in% c("CMR", "COM", "CPV", "CUB", "GAB", "GEO", "GIN", "LAO", "LBN", "LBR", "MOZ", "MUS", "MWI", "NER", "TCD", "TGO")], collapse = "+")
+
+reg <- run_regression(data = t,  dependant = "intervention.id", controls = paste0("Share +", fe.t));summary(reg)
+reg <- run_regression(data = t,  dependant = "intervention.id", controls = "Share");summary(reg)
+
 
 ### Prepare Latex --------------------------------------------------------------
 

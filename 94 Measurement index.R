@@ -60,7 +60,7 @@ controls <- controls %>%
 GTA <- merge(GTA, grid.coverage, by.x = c("implementing.jurisdiction", "years.in.force", "chapter"), by.y = c("country", "year", "chapter"), all.y = T)
 GTA <- merge(GTA, controls, by.x = c("implementing.jurisdiction", "years.in.force"), by.y = c("iso3_o", "year"))
 GTA$intervention.id <- ifelse(is.na(GTA$intervention.id), 0, GTA$intervention.id)
-
+saveRDS(GTA, file = paste0(path.data.out, "GTA_interventions.Rds"))
 TRAINS <- merge(TRAINS, grid.coverage, by.x = c("implementing.jurisdiction", "years.in.force", "chapter"), by.y = c("country", "year", "chapter"), all.y = T)
 TRAINS <- merge(TRAINS, controls, by.x = c("implementing.jurisdiction", "years.in.force"), by.y = c("iso3_o", "year"))
 TRAINS$measure.id <- ifelse(is.na(TRAINS$measure.id), 0, TRAINS$measure.id)
@@ -80,7 +80,7 @@ TRAINS <- TRAINS %>% select(-c(measure.id, gdp_o))
 
 #make bilateral
 help <- merge(grid, GTA, by.x = c("country.1", "year", "chapter"), 
-             by.y = c("implementing.jurisdiction", "years.in.force", "chapter"), all.x = T)
+              by.y = c("implementing.jurisdiction", "years.in.force", "chapter"), all.x = T)
 GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter"), 
              by.y = c("implementing.jurisdiction", "years.in.force", "chapter"),all.x = T)
 
@@ -98,7 +98,7 @@ GTA <- GTA %>% select(-c(coverage.measure.x, coverage.measure.y, intervention.id
 help <- merge(grid, TRAINS, by.x = c("country.1", "year", "chapter"), 
               by.y = c("implementing.jurisdiction", "years.in.force", "chapter"), all.x = T)
 TRAINS <- merge(help, TRAINS, by.x = c("country.2", "year", "chapter"), 
-             by.y = c("implementing.jurisdiction", "years.in.force", "chapter"),all.x = T)
+                by.y = c("implementing.jurisdiction", "years.in.force", "chapter"),all.x = T)
 
 TRAINS$coverage.geom.mean <- apply(TRAINS[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
 TRAINS$coverage.geom.mean.sqrt <- apply(TRAINS[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
