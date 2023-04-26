@@ -799,8 +799,12 @@ IMF.FX <- to_alphabeta(t, "Country.1", "Country.2")
 IMF.FX$sd <- round(t$sd, 4)
 IMF.FX <- unique(IMF.FX)
 
-
-
+IMF.FX <- test
+IMF.FX <- cSplit(IMF.FX, "group", sep = "_", direction = "wide")
+IMF.FX <- IMF.FX %>%
+  filter(group_1 %in% selected.countries &
+         group_2 %in% selected.countries)
+names(IMF.FX) <- c("year", "FXV", "Country.1", "Country.2")
 
 ## CEPII Gravity controls ------------------------------------------------------
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
@@ -818,6 +822,10 @@ controls <- controls %>%
   filter(iso3_d != iso3_o) %>%
   filter(iso3_o %in% selected.countries & iso3_d %in% selected.countries)%>% 
   filter(iso3_d > iso3_o) # avoid double tuples (A-B, B-A)
+
+# FX
+
+controls <- merge(controls, IMF.FX, by = c("year", "Country.1", "Country.2"), all.x = T)
 
 # WB.lpi
 names(WB.lpi) <- c("iso3_o", "year", "lpi_o")
