@@ -2,11 +2,7 @@
 # costs with symmetrically. To do this, a linear model is assumed and generated.
 # To keep the simulation to as close to reality as possible, the 
 
-# install.packages("mixtools")
-
 library(ggplot2)
-#detach("package:haven")
-#install.packages("haven", version = "1.1.2")
 library(ggpubr)
 library(gtalibrary)
 library(tidyverse)
@@ -21,77 +17,77 @@ source("BA_Thesis_code/00 Terms and Definitions.R")
 
 trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
 #data <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
-data <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
-controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
-controls <- controls %>% select(iso3_o, iso3_d, year, gdp_o, gdp_d, exports_o, exports_d)
- 
+#data <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
+controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
+GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index.xlsx"))
+GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
+
 
 # 2. preliminary checks --------------------------------------------------------
 # check if assumed relationship (higher share of NAs in trade costs --> higher trade costs, lower GDP)
 
-trade.costs <- merge(trade.costs, controls[, c("iso3_o","iso3_d","gdp_o","gdp_d", "year")], by.x = c("country.1", "country.2", "year"), by.y = c("iso3_o", "iso3_d", "year"))
-trade.costs$loggdp <- log(trade.costs$gdp_o) + log(trade.costs$gdp_d)
-
-# check average trade costs of available data
-check.perc.na <- trade.costs
-check.perc.na$tij <- ifelse(is.na(check.perc.na$tij), 0, check.perc.na$tij)
-avg.trade.costs <- check.perc.na %>% filter(tij > 0)
-avg.trade.costs <- aggregate(data = avg.trade.costs, tij ~ country.1 , FUN = mean)
-
-# check percentage of NA per country
-check.perc.na$tij <- ifelse(check.perc.na$tij ==  0, 1 ,0)
-check.perc.na <- aggregate(data = check.perc.na, tij ~ country.1, FUN = function(x) sum(x)/length(x))
-names(check.perc.na) <- c("country.1", "perc.na")
-check.perc.na <- merge(avg.trade.costs, check.perc.na, by = c("country.1"), all.y = T)
-
-# avg GDP per country
-avg.gdp <- aggregate(data = trade.costs, gdp_o ~ country.1 , FUN = mean)
-check.perc.na <- merge(check.perc.na, avg.gdp, by = "country.1", all.x = T)
-check.perc.na <- check.perc.na %>% filter(!is.na(tij))
-# plot the results
-p1 <- ggplot(data = check.perc.na, mapping = aes(x = tij, y = perc.na))+
-  geom_point(color = gta_colour$qualitative[7])+
-  geom_smooth(method=lm, color = gta_colour$blue[2])+
-  xlim(c(0,500))+
-  ylim(c(0,1))+
-  xlab("Trade costs")+
-  ylab("Share of trade costs are not available")+
-  labs(caption = "Source: Author's calculation based on Novy (2012)")+
-  theme_minimal()
-p1
-
-p2 <- ggplot(data = check.perc.na, mapping = aes(x = log(gdp_o), y = perc.na))+
-  geom_point(color = gta_colour$qualitative[7])+
-  geom_smooth(method=lm, color = gta_colour$blue[2])+
-  xlim(c(10,25))+
-  ylim(c(0,1))+
-  xlab("log(GDP)")+
-  ylab("Share of trade costs are not available")+
-  labs(caption = "Source: Author's calculation based Conte et al. (2022)")+
-  theme_minimal()
-p2
-
-p3 <- ggarrange(p1, p2, labels = c("Available trade costs to trade costs", "Log(GDP) to trade costs"), hjust = 0)
-p3
-
-gta_plot_saver(p3, path = path.plot, 
-               name = "Trade cost availability",
-               png = T)
-
-
-hist(trade.costs$tij, breaks = 100)
-perc.na.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
-
-rm(p1,p2,p3,trade.cost.stats,check.perc.na, avg.gdp, avg.trade.costs, gta_colour)
-
+if(F){
+  trade.costs <- merge(trade.costs, controls[, c("iso3_o","iso3_d","gdp_o","gdp_d", "year")], by.x = c("country.1", "country.2", "year"), by.y = c("iso3_o", "iso3_d", "year"))
+  trade.costs$loggdp <- log(trade.costs$gdp_o) + log(trade.costs$gdp_d)
+  
+  # check average trade costs of available data
+  check.perc.na <- trade.costs
+  check.perc.na$tij <- ifelse(is.na(check.perc.na$tij), 0, check.perc.na$tij)
+  avg.trade.costs <- check.perc.na %>% filter(tij > 0)
+  avg.trade.costs <- aggregate(data = avg.trade.costs, tij ~ country.1 , FUN = mean)
+  
+  # check percentage of NA per country
+  check.perc.na$tij <- ifelse(check.perc.na$tij ==  0, 1 ,0)
+  check.perc.na <- aggregate(data = check.perc.na, tij ~ country.1, FUN = function(x) sum(x)/length(x))
+  names(check.perc.na) <- c("country.1", "perc.na")
+  check.perc.na <- merge(avg.trade.costs, check.perc.na, by = c("country.1"), all.y = T)
+  
+  # avg GDP per country
+  avg.gdp <- aggregate(data = trade.costs, gdp_o ~ country.1 , FUN = mean)
+  check.perc.na <- merge(check.perc.na, avg.gdp, by = "country.1", all.x = T)
+  check.perc.na <- check.perc.na %>% filter(!is.na(tij))
+  # plot the results
+  p1 <- ggplot(data = check.perc.na, mapping = aes(x = tij, y = perc.na))+
+    geom_point(color = gta_colour$qualitative[7])+
+    geom_smooth(method=lm, color = gta_colour$blue[2])+
+    xlim(c(0,500))+
+    ylim(c(0,1))+
+    xlab("Trade costs")+
+    ylab("Share of trade costs are not available")+
+    labs(caption = "Source: Author's calculation based on Novy (2012)")+
+    theme_minimal()
+  p1
+  
+  p2 <- ggplot(data = check.perc.na, mapping = aes(x = log(gdp_o), y = perc.na))+
+    geom_point(color = gta_colour$qualitative[7])+
+    geom_smooth(method=lm, color = gta_colour$blue[2])+
+    xlim(c(10,25))+
+    ylim(c(0,1))+
+    xlab("log(GDP)")+
+    ylab("Share of trade costs are not available")+
+    labs(caption = "Source: Author's calculation based Conte et al. (2022)")+
+    theme_minimal()
+  p2
+  
+  p3 <- ggarrange(p1, p2, labels = c("Available trade costs to trade costs", "Log(GDP) to trade costs"), hjust = 0)
+  p3
+  
+  gta_plot_saver(p3, path = path.plot, 
+                 name = "Trade cost availability",
+                 png = T)
+  
+  
+  hist(trade.costs$tij, breaks = 100)
+  perc.na.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
+  
+  rm(p1,p2,p3,trade.cost.stats,check.perc.na, avg.gdp, avg.trade.costs, gta_colour)
+}
 # 2. simulate trade costs ------------------------------------------------------
 a <- 0.9
 
-
 # 2.1 Estimate empirical parameters --------------------------------------------
-# Get max empirical CRI
+# Get max empirical CRI --------------------------------------------------------
 
-GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index.xlsx"))
 GTA.coverage <- GTA.coverage %>% 
   filter(chapter == "D")
 CRI <- max(na.omit(GTA.coverage$coverage.measure.sqrt))
@@ -104,76 +100,67 @@ GTA.coverage$scaled.up <- GTA.coverage$simulated.interventions/GTA.coverage$inte
 
 
 #scale up
-GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
 GTA <- unique(cSplit(GTA, "chapter", direction = "long"))
 GTA <- unique(cSplit(GTA, "years.in.force", direction = "long"))
 
 data.out <- data.frame()
 
-for(i in years){
+for(i in years.observation){
   data.loop <- GTA %>% filter(years.in.force == i)
   
-  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + mast.chapter, FUN = function(x) length(unique(x)))
+  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + gta.evaluation, FUN = function(x) length(unique(x)))
   
   data.out <- rbind(data.out, data.loop)
 }
 
-names(data.out) <- c("country.1", "country.2", "year","chapter","mast.chapter",  "number.of.interventions")
+names(data.out) <- c("country.1", "country.2", "year","chapter","gta.evaluation",  "number.of.interventions")
 
 data.out <- pivot_wider(data.out, id_cols = 1:4, names_from = "chapter", values_from = "number.of.interventions")
 data.out$AB <- ifelse(is.na(data.out$AB), 0, data.out$AB)
 data.out$D <- ifelse(is.na(data.out$D), 0, data.out$D)
 data.out$GTT <- data.out$AB + data.out$D
 data.out <- pivot_longer(data.out, cols = 5:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
-data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "mast.chapter", values_from = "number.of.interventions")
+data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "gta.evaluation", values_from = "number.of.interventions")
 data.out[is.na(data.out)] <- 0
-data.out$total <- apply(data.out[,5:ncol(data.out)],1,FUN = sum)
 
 data.out <- data.out %>% 
   filter(chapter == "D") %>% 
-  select(c(country.1, country.2, year, total)) %>% 
-  left_join(GTA.coverage[, c("implementing.jurisdiction", "years.in.force", "scaled.up")], c("country.1" = "implementing.jurisdiction", "year" = "years.in.force"))
-
-data.out$total <- data.out$total * data.out$scaled.up
-data.out$scaled.up <- NULL
+  left_join(GTA.coverage[, c("implementing.jurisdiction", "years.in.force", "scaled.up")], c("country.1" = "implementing.jurisdiction", "year" = "years.in.force"))%>%
+  mutate(harmful = harmful * scaled.up)%>%
+  mutate(liberalising = liberalising * scaled.up)%>%
+  select(-scaled.up)
 
 data.out <- to_alphabeta(data.out, "country.1", "country.2")
-data.out <- aggregate(data = data.out, total ~country.1 + country.2 + year, FUN = sum)
-data.out$total <- round(data.out$total)
-
-
-data <- data %>%
-  select(-c(B:P)) %>%
-  filter(chapter == "D")
-data$C <- NULL
-
-data <- data %>%
-  rename("total.revealed" = "total") %>%
-  left_join(data.out, by = c("country.1", "country.2", "year") )
-data$total <- ifelse(is.na(data$total), 0, data$total)
+data.out <- aggregate(data = data.out, cbind(liberalising, harmful) ~country.1 + country.2 + year, FUN = sum)
+data.out <- data.out %>%
+  mutate(harmful = round(harmful))%>%
+  mutate(liberalising = round(liberalising))
 
 rm(GTA.coverage, GTA.coverage.year, grid, data.loop, GTA)
 
 # 2.2 Create model -----------------------------------------------------------------
 GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
-
-#clean data
-sim.data <- data %>% filter(chapter == "D")
+GTA.measurement <- GTA.measurement %>% filter(chapter == "D")
+controls <- controls %>% filter(chapter == "D")
 
 # add GDP
-sim.data <- sim.data %>% 
-  left_join(controls, by = c( "country.1" = "iso3_d", "country.2" = "iso3_o", "year" = "year")) %>% 
+sim.data <- data.out %>% 
+  left_join(controls, by = c("country.1", "country.2", "year")) %>% 
   mutate(gdp_o = ifelse(is.na(gdp_o), gdp_d, gdp_o))%>%
   mutate(gdp_d = ifelse(is.na(gdp_d), gdp_o, gdp_d))%>%
   filter(!is.na(gdp_o)) 
 sim.data$gdp <- apply(sim.data[ , c("gdp_d", "gdp_o")], 1, FUN = function(x) exp(mean(log(x))))
 
 #add CRI
-sim.data <- merge(sim.data, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
+
+t <- sim.data %>%
+  left_join(GTA.measurement, by = c("country.1", "country.2", "year")) %>%
+  mutate(lpi = ifelse(is.na(lpi), 0, lpi)) %>%
+  left_join(trade.costs[, c("country.1", "country.2", "year", "geometric_avg_tariff")], by = c("country.1", "country.2", "year"))
 
 
 # create model
-sim.data$lpi <- ifelse(is.na(sim.data$lpi), 0, sim.data$lpi)
+
 sim.data$geometric_avg_tariff <- ifelse(is.na(sim.data$geometric_avg_tariff), 0, sim.data$geometric_avg_tariff)
 perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
 

@@ -310,6 +310,7 @@ detach("package:fitdistrplus")
 detach("package:MASS")
 
 # 5. Other tests ----------------------------------------------------------------
+## 5.1 NTMs vs export share ----------------------------------------------------
 #not exports but share of exports (or exports vs intranational)
 #Also, not bilateral
 export.share <- readRDS(file = paste0(path.data.out, "Export_share.Rds"))
@@ -330,6 +331,14 @@ fe.t <- paste0(fe.t[!fe.t %in% c("CMR", "COM", "CPV", "CUB", "GAB", "GEO", "GIN"
 reg <- run_regression(data = t,  dependant = "intervention.id", controls = paste0("Share +", fe.t));summary(reg)
 reg <- run_regression(data = t,  dependant = "intervention.id", controls = "Share");summary(reg)
 
+
+
+## 5.2 Trade flow threshold ----------------------------------------------------
+sigma = 8
+
+beta_exports <- 0.04456
+threshold <- exp(2*(sigma-1))/beta_exports
+threshold_sqrt <- sqrt(threshold)
 
 ### Prepare Latex --------------------------------------------------------------
 

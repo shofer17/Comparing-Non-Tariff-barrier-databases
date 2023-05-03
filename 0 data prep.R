@@ -855,6 +855,8 @@ controls <- merge(controls, CEPII.landlocked, by = c("iso3_d"), all.x = T)
 # Intranational Trade flows
 load(file = paste0(path.data.raw, "Final goods support table.Rdata"))
 exports <- aggregate(data = final, Value  ~ Year + Reporter.jurisdiction, FUN = sum)
+test <- aggregate(data = final, Value  ~ Year + Reporter.jurisdiction + Partner.jurisdiction, FUN = sum)
+
 exports <- exports %>%
   filter(Year %in% years) %>%
   left_join(country.names[, c("name", "iso_code")], by = c("Reporter.jurisdiction" =  "name")) 
