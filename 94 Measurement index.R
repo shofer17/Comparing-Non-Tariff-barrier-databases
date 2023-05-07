@@ -74,6 +74,7 @@ GTA <- grid.coverage %>%
   left_join(controls, by = c("country" = "iso3_o", "year"))
 
 saveRDS(GTA, file = paste0(path.data.out, "GTA_interventions.Rds"))
+GTA <- readRDS(file = paste0(path.data.out, "GTA_interventions.Rds"))
 
 TRAINS <- grid.coverage %>%
   select(-gta.evaluation)%>%
@@ -85,18 +86,18 @@ TRAINS <- grid.coverage %>%
 
 # get measures
 GTA <- GTA %>%
-  mutate(coverage.measure = intervention.id/gdp_o)%>%
-  mutate(coverage.measure.sqrt = intervention.id/sqrt(gdp_o))
+  mutate(CRI = intervention.id/gdp_o)%>%
+  mutate(CRI_sqrt = intervention.id/sqrt(gdp_o))%>% 
+  select(-c(gdp_o))
   
 TRAINS <- TRAINS %>%
-  mutate(coverage.measure = measure.id/gdp_o)%>%
-  mutate(coverage.measure.sqrt = measure.id/sqrt(gdp_o))
+  mutate(CRI = measure.id/gdp_o)%>%
+  mutate(CRI_sqrt = measure.id/sqrt(gdp_o))%>% 
+  select(-c(measure.id, gdp_o))
 
 
 writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index.xlsx"))
-
-GTA <- GTA %>% select(-c(gdp_o))
-TRAINS <- TRAINS %>% select(-c(measure.id, gdp_o))
+GTA <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index.xlsx"))
 
 
 #make bilateral
@@ -107,16 +108,18 @@ GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter", "gta.evaluation
 GTA <- GTA %>% 
   filter(year %in% years.observation)
 
-GTA$coverage.geom.mean.log <- apply(GTA[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
-GTA$coverage.mean.log <- apply(GTA[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) mean(x))
-GTA$coverage.geom.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
-GTA$coverage.mean <- apply(GTA[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) mean(x))
-GTA$intervention.geom.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) exp(mean(log(x))))
-GTA$intervention.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) mean(x))
+GTA$CRI_sqrt_gm <- apply(GTA[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
+GTA$CRI_sqrt <- apply(GTA[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) mean(x))
+GTA$CRI_gm <- apply(GTA[, c("CRI.x", "CRI.y")], 1, FUN = function(x) exp(mean(log(x))))
+GTA$CRI <- apply(GTA[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
+#GTA$intervention.geom.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) exp(mean(log(x))))
+#GTA$intervention.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) mean(x))
 
 
 
-GTA <- GTA %>% select(-c(coverage.measure.x, coverage.measure.y, intervention.id.x, intervention.id.y))
+GTA <- GTA %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, intervention.id.x, intervention.id.y))
+
+
 
 help <- merge(grid, TRAINS, by.x = c("country.1", "year", "chapter"), 
               by.y = c("country", "year", "chapter"), all.x = T)
@@ -125,12 +128,12 @@ TRAINS <- merge(help, TRAINS, by.x = c("country.2", "year", "chapter"),
 TRAINS <- TRAINS %>% 
   filter(year %in% years.observation)
 
-TRAINS$coverage.geom.mean <- apply(TRAINS[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) exp(mean(log(x))))
-TRAINS$coverage.geom.mean.sqrt <- apply(TRAINS[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
-TRAINS$coverage.mean <- apply(TRAINS[, c("coverage.measure.x", "coverage.measure.y")], 1, FUN = function(x) mean(x))
-TRAINS$coverage.mean.sqrt <- apply(TRAINS[, c("coverage.measure.sqrt.x", "coverage.measure.sqrt.y")], 1, FUN = function(x) mean(x))
 
-TRAINS <- TRAINS %>% select(-c(coverage.measure.x, coverage.measure.y))
+TRAINS$CRI_sqrt_gm <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
+TRAINS$CRI_sqrt <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) mean(x))
+TRAINS$CRI_gm <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) exp(mean(log(x))))
+TRAINS$CRI <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
+TRAINS <- TRAINS %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, intervention.id.x, intervention.id.y))
 
 
 

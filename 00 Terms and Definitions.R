@@ -6,6 +6,7 @@ library(tidyverse)
 library(splitstackshape)
 library(gtalibrary)
 
+sigma = 8 # elasticity of substitution
 years <- 2005:2019
 base <- 2005:2007
 years.observation <- 2009:2019
@@ -21,6 +22,7 @@ path.plot <- "2 plots/"
 selected.countries <- read.csv(file = paste0(path.data.out, "selected countries.csv"))$x
 selected.mast <- read.csv(file = paste0(path.data.out, "selected MAST chapters.csv"))$x
 selected.mast.red <- selected.mast[!selected.mast %in% c("N")]
+mast.names <- c(paste0(selected.mast[!selected.mast %in% "N"], "_harmful"), paste0(selected.mast[!selected.mast %in% "N"], "_liberalising"))
 
 
 
