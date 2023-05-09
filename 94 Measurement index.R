@@ -133,7 +133,7 @@ TRAINS$CRI_sqrt_gm <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = fu
 TRAINS$CRI_sqrt <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) mean(x))
 TRAINS$CRI_gm <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) exp(mean(log(x))))
 TRAINS$CRI <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
-TRAINS <- TRAINS %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, intervention.id.x, intervention.id.y))
+TRAINS <- TRAINS %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y))
 
 
 
