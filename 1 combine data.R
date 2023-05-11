@@ -111,23 +111,31 @@ GTA.sym.delta <- GTA.sym %>%
   pivot_longer(cols = 5:ncol(GTA.sym), names_to = "variable", values_to = "value")
 
 GTA.sym.delta <- GTA.sym.delta %>%
-  filter(!variable %in% c("L_harmful", "L_liberalising"))
+  filter(!variable %in% c("L_harmful", "L_liberalising")) %>%
+  unique()
 
 # join values and get delta
 GTA.sym.delta <- GTA.sym.delta %>% 
   left_join(base.years, by = c("country.1", "country.2", "chapter", "variable")) %>%
   mutate(delta = value.x - value.y)
 GTA.sym.delta.analysis <- GTA.sym.delta
-GTA.sym.delta <- GTA.sym.delta %>%
+test <- GTA.sym.delta %>%
   select(-c(value.x, value.y)) %>%
   pivot_wider(values_from = "delta", names_from = "variable")
+
+
+GTA.sym.delta  %>%
+  dplyr::group_by(country.1, country.2, year, chapter, variable) %>%
+  dplyr::summarise(n = dplyr::n(), .groups = "drop") %>%
+  dplyr::filter(n > 1L)
+
 
 GTA.sym.delta.analysis <- GTA.sym.delta.analysis %>%
   filter(variable == "tij")%>%
   filter(chapter == "D") %>%
   rename("value.base" = "value.y", "value.year" = "value.x")
-hist(GTA.sym.delta.analysis$delta, 500)
-skewness(na.omit(GTA.sym.delta.analysis$delta))
+#hist(GTA.sym.delta.analysis$delta, 500)
+#skewness(na.omit(GTA.sym.delta.analysis$delta))
 
 sum(is.na(GTA.sym.delta.analysis$delta))/nrow(GTA.sym.delta.analysis) # 0.42
 sum(!is.na(GTA.sym.delta.analysis$value.base)  & is.na(GTA.sym.delta.analysis$value.year))/nrow(GTA.sym.delta.analysis) #0.11
@@ -186,9 +194,12 @@ GTA.sym <- GTA.sym %>%
 GTA.sym <- GTA.sym %>%
   mutate(is.available = ifelse(is.na(tij), 0, 1))%>% # get 0 and 1s for heckman
   mutate(intranat.trade = ((gdp_d - exports_d) * (gdp_o - exports_o))^(1/(2*(sigma-1)))) %>% # calculate Internal trade flows
-  
   mutate(tij.heck = ifelse(is.na(tij), 0, tij)) # make all elements that are not availabe 0
 
+
+t <- GTA.sym.delta %>% mutate_at(names(GTA.sym.delta)[5:ncol(GTA.sym.delta)], as.numeric)
+
+t <- lapply(GTA.sym.delta[, 5:ncol(GTA.sym.delta)], as.numeric)
 
 GTA.sym.delta <- GTA.sym.delta %>%
   mutate(is.available = ifelse(is.na(tij), 0, 1))%>% # get 0 and 1s for heckman
@@ -205,7 +216,7 @@ names(GTA.sym.heck) <- paste0("base_", names(GTA.sym.heck))
 
 TRAINS.sym <- TRAINS.sym %>%
   mutate(is.available = ifelse(is.na(tij), 0, 1))%>% # get 0 and 1s for heckman
-  mutate(intranat..trade = ((gdp_d - exports_d) * (gdp_o - exports_o))^(1/(2*(sigma-1)))) %>% # calculate Internal trade flows
+  mutate(intranat.trade = ((gdp_d - exports_d) * (gdp_o - exports_o))^(1/(2*(sigma-1)))) %>% # calculate Internal trade flows
   mutate(tij.heck = ifelse(is.na(tij), 0, tij)) # make all elements that are not availabe 0
 
 
@@ -236,9 +247,6 @@ GTA.sym$gdp <- apply(GTA.sym[, c("gdp_d", "gdp_o")], 1, FUN = function(x) log(me
 
 # 4. Regressions ---------------------------------------------------------------
 
-detach("package:goft")
-detach("package:fitdistrplus")
-detach("package:MASS")
 
 run_regression <- function(data,type = "lm", 
                            dependant = "tij", 
@@ -264,8 +272,8 @@ run_regression <- function(data,type = "lm",
 }
 
 ## 4.1 regression components  ---------------------------------------------------
-fe <- paste0(names(GTA.sym)[(column.dummy.start+12):(ncol(GTA.sym)-1)], collapse = "+" ) # fixed effects
-fe.vec <- names(GTA.sym)[(column.dummy.start+10):ncol(GTA.sym)]
+fe <- paste0(names(GTA.sym)[(column.dummy.start+12):(ncol(GTA.sym)-2)], collapse = "+" ) # fixed effects
+fe.vec <- names(GTA.sym)[(column.dummy.start+11):(ncol(GTA.sym)-2)]
 controls <- "total_harmful + total_liberalising + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff" # controls
 controls.trains <- "total_harmful  + log(distw_harmonic) + comlang_off + comcol + contig + comlang_ethno + fta_wto + lsci + lpi + landlocked  + geometric_avg_tariff" # controls
 
@@ -313,17 +321,18 @@ ols.fe.w <- run_regression(GTA.sym, controls = paste0(controls,"+", fe), weights
 library(sampleSelection)
 
 
-heckit <- run_regression(GTA.sym, type = "heckman", controls = controls, controls.selection = paste0(controls,  " + gdp")); summary(heckit)
-heckit.trains <- run_regression(TRAINS.sym, type = "heckman", controls = controls.trains, controls.selection = paste0(controls.trains,  " + intranat.trade")); summary(heckit.trains)
+heckit <- run_regression(GTA.sym, type = "heckman", controls = paste0(controls, "+CRI_sqrt_gm_harmful + CRI_sqrt_gm_liberalising") , controls.selection = paste0(controls,  "+CRI_sqrt_gm_harmful + CRI_sqrt_gm_liberalising + intranat.trade")); summary(heckit)
+heckit.trains <- run_regression(TRAINS.sym, type = "heckman", controls = paste0(controls.trains, "+CRI_sqrt_gm"), controls.selection = paste0(controls.trains,  "+CRI_sqrt_gm + intranat.trade")); summary(heckit.trains)
 
 
+# MAKE COMMON THE LEFT OUT VARABLES
 fe.vec.adjust.gta <- fe.vec[!fe.vec %in% c("CUB", "MMR","BRB","CPV","LBR","SVK", "year_2019")]
 heckit.fe <- run_regression(GTA.sym, 
                             type = "heckman", 
-                            controls = paste0("total_harmful + total_liberalising","+",paste0(fe.vec, collapse = "+")), 
-                            controls.selection = paste0(paste0(fe.vec, collapse = "+"),"+total_harmful + total_liberalising  + intranat.trade")); summary(heckit.fe)
+                            controls = paste0("total_harmful + total_liberalising","+",paste0(fe.vec.adjust.gta, collapse = "+")), 
+                            controls.selection = paste0(paste0(fe.vec.adjust.gta, collapse = "+"),"+total_harmful + total_liberalising  + intranat.trade")); summary(heckit.fe)
 
-fe.vec.adjust.trains <- fe.vec[! fe.vec %in% c("CRI", "year_2019")]
+fe.vec.adjust.trains <- fe.vec[! fe.vec %in% c("CUB","LBR", "CRI","SVK", "year_2019")]
 heckit.fe.trains <- run_regression(TRAINS.sym, 
                             type = "heckman", 
                             controls = paste0("total_harmful  + log(distw_harmonic) + geometric_avg_tariff","+",paste0(fe.vec.adjust.trains, collapse = "+")), 
@@ -360,19 +369,19 @@ heckit.fe.chapter <- run_regression(GTA.sym,
 #   }
 # }
 
-# library(beepr)
-# for (i in 1:length(fe.vec)) {
-# 
-#   t <- try(eval(parse(text = paste0("selection(data = TRAINS.sym, selection = is.available ~ ", controls.heck, "+ intranat.trade, tij ~total_harmful +", paste0(fe.vec.adjust.trains[1:i], collapse = "+"), ", method = '2step')"))))
-# 
-#   if(!inherits(t, "try-error")){
-#     print(i)
-# 
-#   } else{
-#     cat("Error occurred when removing variable ", fe.vec.adjust.trains[i], "\n")
-#     beep(sound = 2)
-# }
-# }
+library(beepr)
+for (i in 84:length(fe.vec.adjust.trains)) {
+
+  t <- try(eval(parse(text = paste0("selection(data = TRAINS.sym, selection = is.available ~ ", "+ intranat.trade, tij ~total_harmful +", paste0(fe.vec.adjust.trains[1:i], collapse = "+"), ", method = '2step')"))))
+
+  if(!inherits(t, "try-error")){
+    print(i)
+
+  } else{
+    cat("Error occurred when removing variable ", fe.vec.adjust.trains[i], "\n")
+    beep(sound = 2)
+}
+}
 
 # remove libraries causing trouble
 detach("package:goft")
@@ -383,17 +392,22 @@ detach("package:MASS")
 ## 4.4 Make table --------------------------------------------------------------
 library(texreg)
 out_stock_gta <- texreg(list(ols, ols.fe, heckit, heckit.fe), omit.coef = paste0(fe.vec,collapse = "|"), 
-                    custom.model.names = c("OLS", "OLS-FE", "Heckit"))
+                    custom.model.names = c("OLS", "OLS-FE", "Heckit", "Heckit-FE"))
 
 out_stock_trains <- texreg(list(ols.trains, ols.fe.trains, heckit.trains, heckit.fe.trains), omit.coef = paste0(fe.vec,collapse = "|"), 
                         custom.model.names = c("OLS", "OLS-FE", "Heckit", "Heckit-FE"))
 
 
-out_OLS_GTA_TRAINS <- texreg(list(ols, ols.fe, ols.trains, ols.fe.trains), omit.coef = paste0(fe.vec,collapse = "|"),
+out_OLS_GTA_TRAINS <- texreg(list(ols, ols.fe, ols.trains, ols.fe.trains), #omit.coef = paste0(fe.vec,collapse = "|"),
                              custom.model.names = c("GTA", "GTA-FE", "TRAINS", "TRAINS-FE"))
 
 
-write.table(out_stock, file = paste0(path.data.out, "regression_results_GTA_stock.txt"))
+out_Heckit_GTA_TRAINS <- texreg(list(heckit, heckit.fe, heckit.trains, heckit.fe.trains), #omit.coef = paste0(fe.vec,collapse = "|"),
+                             custom.model.names = c("GTA", "GTA-FE", "TRAINS", "TRAINS-FE"))
+
+
+write.table(out_stock_gta, file = paste0(path.data.out, "regression_results_GTA_stock.txt"))
+write.table(out_stock_trains, file = paste0(path.data.out, "regression_results_TRAINS_stock.txt"))
 
 
 # 5. Other tests ----------------------------------------------------------------
@@ -421,11 +435,19 @@ reg <- run_regression(data = t,  dependant = "intervention.id", controls = "Shar
 
 
 ## 5.2 Trade flow threshold ----------------------------------------------------
+
+
+GTA.sym.t <- GTA.sym
+GTA.sym.t$is.available.2 <- ifelse(GTA.sym$is.available == 1, 1, -1)
+ols.t <- run_regression(GTA.sym.t, dependant = "is.available.2", controls = paste0(controls, "+ intranat.trade"))
+beta_intranat.trade <- ols.t$coefficients["intranat.trade"]
 sigma = 8
 
 beta_intranat.trade <- 0.04456
 threshold <- exp(2*(sigma-1))/beta_intranat.trade
 threshold_sqrt <- sqrt(threshold)
+
+
 
 
 ### PPML -------------------------------------------------------------------------

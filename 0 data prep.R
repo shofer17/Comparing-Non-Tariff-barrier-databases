@@ -757,16 +757,36 @@ IMF.FX <- IMF.FX %>%
   filter(year %in% years)
 
 IMF.correspondance <- read.csv2(file = paste0(path.data.raw, "IMF_ISO_correspondance.csv")) # correspondance from Bing-Chat (GPT-4)
+IMF.correspondance <- IMF.correspondance
+  
 EU <- country.names[country.names$is.eu, c("name", "iso_code")] %>%
   select(-name)%>%
   mutate(Country.1 = "Euro Area")%>%
-  rename("ISO" = "iso_code")
+  rename("ISO" = "iso_code") %>%
+  filter(!ISO %in% c("BGR", "CZE", "SWE", "POL", "HUN", "ROM", "DNK", "HRV", "GBR"))
 
 IMF.correspondance <- rbind(IMF.correspondance, EU, c("Côte d'Ivoire", "CIV"))
+IMF.correspondance$euro <- ifelse(IMF.correspondance$ISO %in% EU$ISO, 1, 0)
 
 IMF.FX <- IMF.FX %>%
-  left_join(IMF.correspondance, by = "Country.1", multiple = "all")
+  left_join(IMF.correspondance, by = "Country.1", multiple = "all")%>%
+  filter(ISO %in% selected.countries)
 
+
+IMF.FX <- IMF.FX %>%
+  filter(!(ISO == "EST" & Country.1 == "Euro Area" & year < 2011))%>%
+  filter(!(ISO == "EST" & Country.1 != "Euro Area" & year >= 2011))%>%
+  filter(!(ISO == "LVA" & Country.1 == "Euro Area" & year < 2014))%>%
+  filter(!(ISO == "LVA" & Country.1 != "Euro Area" & year >= 2014))%>%
+  filter(!(ISO == "SVK" & Country.1 == "Euro Area" & year < 2009))%>%
+  filter(!(ISO == "SVK" & Country.1 != "Euro Area" & year >= 2009))%>%
+  filter(!(ISO == "SVN" & Country.1 == "Euro Area" & year < 2007))%>%
+  filter(!(ISO == "SVN" & Country.1 != "Euro Area" & year >= 2007))%>%
+  filter(!(ISO == "LTU" & Country.1 == "Euro Area" & year < 2015))%>%
+  filter(!(ISO == "LTU" & Country.1 != "Euro Area" & year >= 2015))%>%
+  filter(!(ISO == "MLT" & Country.1 == "Euro Area" & year < 2008))%>%
+  filter(!(ISO == "MLT" & Country.1 != "Euro Area" & year >= 2008))
+  
 t <- unique(IMF.FX[is.na(IMF.FX$ISO), "Country.1"]) #cust Cuba missing and it is not part of IMF
 t <- selected.countries[!selected.countries %in% IMF.FX$ISO]
 
@@ -781,6 +801,8 @@ IMF.FX <- IMF.FX %>%
   mutate(group = paste0(ISO.x, "_", ISO.y)) %>%
   select(-c(ISO.x, ISO.y, year))
 
+IMF.FX <- IMF.FX %>% mutate(rate = round(rate, 3))
+
 library(dplyr)
 library(zoo)
 
@@ -792,20 +814,22 @@ IMF.FX <- IMF.FX %>%
   group_by(year, group)%>%
   summarise(avg_moving_sd = mean(moving_sd, na.rm = TRUE))
 
-IMF.FX <- cSplit(test, "group", sep = "_", direction = "wide")
+IMF.FX <- cSplit(IMF.FX, "group", sep = "_", direction = "wide")
 names(IMF.FX) <- c("year", "sd", "Country.1", "Country.2")
 
-IMF.FX <- to_alphabeta(t, "Country.1", "Country.2")
-IMF.FX$sd <- round(t$sd, 4)
+IMF.FX <- to_alphabeta(IMF.FX, "Country.1", "Country.2")
+IMF.FX$sd <- round(IMF.FX$sd, 2)
 IMF.FX <- unique(IMF.FX)
 
-IMF.FX <- test
-IMF.FX <- cSplit(IMF.FX, "group", sep = "_", direction = "wide")
 IMF.FX <- IMF.FX %>%
-  filter(group_1 %in% selected.countries &
-           group_2 %in% selected.countries)
+  filter(Country.1 %in% selected.countries &
+           Country.2 %in% selected.countries)
 names(IMF.FX) <- c("year", "FXV", "Country.1", "Country.2")
 
+IMF.FX <- IMF.FX %>% dplyr::group_by(Country.1, Country.2, year) %>%
+  dplyr::mutate(n = dplyr::n()) %>%
+  dplyr::filter(n == 1L)%>% # drop a few observations which have issues with the start of the rollmean and with the change from national currency to EUR.
+  ungroup
 ## CEPII Gravity controls ------------------------------------------------------
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
 CEPII.landlocked <- cepiigeodist::geo_cepii[, c("iso3", "landlocked")] ## Landlocked
@@ -824,8 +848,10 @@ controls <- controls %>%
   filter(iso3_d > iso3_o) # avoid double tuples (A-B, B-A)
 
 # FX
-
-controls <- merge(controls, IMF.FX, by = c("year", "Country.1", "Country.2"), all.x = T)
+controls <- merge(controls, IMF.FX, 
+                  by.x = c("year", "iso3_o", "iso3_d"), 
+                  by.y = c("year", "Country.1", "Country.2"), 
+                  all.x = T)
 
 # WB.lpi
 names(WB.lpi) <- c("iso3_o", "year", "lpi_o")
@@ -905,7 +931,7 @@ controls$lpi <- apply(controls[ , c("lpi_d", "lpi_o")], 1, FUN = function(x) exp
 controls <- controls %>% select(-c(landlocked_o, landlocked_d, gdp.cap.ppp_d, gdpcap_ppp_o, lsci_o, lsci_d, lpi_d, lpi_o))
 saveRDS(controls, file = paste0(path.data.out, "Controls cleaned CEPII.RData"))
 
-controls <- controls %>% select(iso3_d, iso3_o, year, distw_harmonic, contig, diplo_disagreement, comlang_ethno, comlang_off, comcol, comrelig, fta_wto, dist, gdp.cap.ppp, landlocked, lsci, lpi, exports_o, exports_d, gdp_d, gdp_o)
+controls <- controls %>% select(iso3_d, iso3_o, year, distw_harmonic, contig, diplo_disagreement, comlang_ethno, comlang_off, comcol, comrelig, fta_wto, dist, gdp.cap.ppp, landlocked, lsci, lpi, exports_o, exports_d, gdp_d, gdp_o, FXV)
 controls <- unique(to_alphabeta(controls, "iso3_d", "iso3_o"))
 
 controls <- merge(grid, controls, by.x = c("country.1", "country.2", "year"), by.y = c("iso3_d", "iso3_o", "year"))
