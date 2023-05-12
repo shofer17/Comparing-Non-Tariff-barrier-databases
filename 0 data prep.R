@@ -801,7 +801,7 @@ IMF.FX <- IMF.FX %>%
   mutate(group = paste0(ISO.x, "_", ISO.y)) %>%
   select(-c(ISO.x, ISO.y, year))
 
-IMF.FX <- IMF.FX %>% mutate(rate = round(rate, 3))
+#IMF.FX <- IMF.FX %>% mutate(rate = round(rate, 3))
 
 library(dplyr)
 library(zoo)
@@ -818,7 +818,7 @@ IMF.FX <- cSplit(IMF.FX, "group", sep = "_", direction = "wide")
 names(IMF.FX) <- c("year", "sd", "Country.1", "Country.2")
 
 IMF.FX <- to_alphabeta(IMF.FX, "Country.1", "Country.2")
-IMF.FX$sd <- round(IMF.FX$sd, 2)
+IMF.FX$sd <- round(IMF.FX$sd, 4)
 IMF.FX <- unique(IMF.FX)
 
 IMF.FX <- IMF.FX %>%
