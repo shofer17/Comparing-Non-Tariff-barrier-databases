@@ -153,29 +153,34 @@ saveRDS(WTO.sym, file = paste0(path.data.out, "WTO_symmetric_w_controls.RData"))
 
 rm(base.years, base)
 # 3. Add Dummies ---------------------------------------------------------------
+data <- GTA
 
-create_dummies <- function(data){
-  data <- dummy_cols(data, select_columns = "country.1")
-  column.dummy.start <<- min(grep("country.1.", names(data)))
+create_dummies <- function(data, both = T){
   
-  names(data)[column.dummy.start:ncol(data)] <- substr(names(data)[column.dummy.start:ncol(data)], 11,13)
+  data$dummycol <- paste0(data$country.1, "_", data$year)
+  data$dummycol2 <- paste0(data$country.2, "_", data$year)
+  data$dummycol3 <- paste0(data$country.1, "_", data$country.2)
+  # create 
+  data <- dummy_cols(data, select_columns = "dummycol")
+  column.dummy.start <<- min(grep("dummycol_", names(data)))
+  
+  names(data)[column.dummy.start:ncol(data)] <- substr(names(data)[column.dummy.start:ncol(data)], 10,18)
   #TRAINS.sym$ZWE <- 0 #correct for last country in country.2
   for(i in column.dummy.start:ncol(data)){ # create dummies and add both countries
-    data[,i] <- ifelse((data[, "country.1"] == names(data)[i]) |
-                         (data[, "country.2"] == names(data)[i]), 1,0)
+    data[,i] <- ifelse((data[, "dummycol"] == names(data)[i]) |
+                         (data[, "dummycol2"] == names(data)[i]), 1,0)
   }
-  data <- dummy_cols(data, select_columns = "year")
-  return(data)
+    return(data)
 }
 
 
 ## TRAINS -----------
 TRA <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
-TRA.zero.countries <- read.csv(paste0(path.data.reg, "TRAINS_non_zero_countries.csv"))
+TRA.d <- readRDS(file = paste0(path.data.out, "TRAINS_delta_symmetric_w_controls.RData"))
+
+#TRA.zero.countries <- read.csv(paste0(path.data.reg, "TRAINS_non_zero_countries.csv"))
 TRA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "TRAINS_Measurement_index.xlsx"))
 TRA <- merge(TRA, TRA.measurement, by = c("country.1", "country.2", "year", "chapter"), all.x = T)
-TRA <- TRA %>% 
-  filter(chapter == "D")
 
 ## GTA -----------
 GTA <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
@@ -188,10 +193,7 @@ GTA.measurement <- GTA.measurement %>%
               values_from = c("CRI_sqrt_gm","CRI_sqrt","CRI_gm","CRI"))
 
 GTA <- merge(GTA, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
-GTA.zero.countries <- read.csv(paste0(path.data.reg, "GTA_non_zero_countries.csv"))
-GTA <- GTA %>% 
-  filter(chapter == "D")
-
+#GTA.zero.countries <- read.csv(paste0(path.data.reg, "GTA_non_zero_countries.csv"))
 
 GTA <- GTA %>%
   mutate(is.available = ifelse(is.na(tij), 0, 1))%>% # get 0 and 1s for heckman
@@ -208,13 +210,6 @@ GTA.d <- GTA.d %>%
   mutate(intranat.trade = ((gdp_d - exports_d) * (gdp_o - exports_o))^(1/(2*(sigma-1)))) %>% # calculate Internal trade flows
   mutate(tij.heck = ifelse(is.na(tij), 0, tij)) # make all elements that are not availabe 0
 
-controls.vec <- c("total_harmful", "total_liberalising", "distw_harmonic", "comlang_off", "comcol", "contig", "comlang_ethno", "fta_wto", "lsci", "lpi", "landlocked", "geometric_avg_tariff", "intranat.trade", "FXV")
-GTA.heck <- GTA %>% 
-  select(controls.vec)
-
-names(GTA.heck) <- paste0("base_", names(GTA.heck))
-
-
 
 TRA <- TRA %>%
   mutate(is.available = ifelse(is.na(tij), 0, 1))%>% # get 0 and 1s for heckman
@@ -227,18 +222,6 @@ TRA.d <- TRA.d %>%
   mutate(intranat.trade = ((gdp_d - exports_d) * (gdp_o - exports_o))^(1/(2*(sigma-1)))) %>% # calculate Internal trade flows
   mutate(tij.heck = ifelse(is.na(tij), 0, tij)) # make all elements that are not availabe 0
 
-TRA.heck <- TRA %>% 
-  filter(chapter == "D")%>%
-  select(controls.vec)
-
-
-names(TRA.heck) <- paste0("base_", names(TRA.heck))
-TRA.d.heck <- cbind(TRA.d,TRA.heck )
-
-
-
-
-
 TRA <- create_dummies(TRA)
 TRA.d <- create_dummies(TRA.d)
 GTA <- create_dummies(GTA)
@@ -247,39 +230,25 @@ GTA.d <- create_dummies(GTA.d)
 GTA$gdp <- apply(GTA[, c("gdp_d", "gdp_o")], 1, FUN = function(x) log(mean(x)))
 
 
+saveRDS(GTA.d, file = paste0(path.data.out, "GTA_delta_final.RData"))
+saveRDS(TRA.d, file = paste0(path.data.out, "TRAINS_delta_final.RData"))
+
+saveRDS(GTA, file = paste0(path.data.out, "GTA_final.RData"))
+saveRDS(TRA, file = paste0(path.data.out, "TRAINS_final.RData"))
+
 # 4. Regressions ---------------------------------------------------------------
+GTA.d <- readRDS(file = paste0(path.data.out, "GTA_delta_final.RData"))
+TRA.d <- readRDS(file = paste0(path.data.out, "TRAINS_delta_final.RData"))
 
-
-reg <- function(data,type = "lm", 
-                           dependant = "tij", 
-                           cont, 
-                           dependant.selection = "is.available", 
-                           cont.selection,
-                           weights = NULL){
-  
-  if(type == "lm"){
-    reg <- paste0("lm(data = data,", dependant, " ~", cont, ", weights = ",weights,")")
-  }
-  
-  if(type == "heckman"){
-    
-    reg <- paste0("selection(", dependant.selection, "~", cont.selection, ",", 
-                  dependant,           "~", cont, ",",
-                  "method = '2step', data = data)")
-  }
-  
-  reg <- paste0("output <- ", reg)
-  eval(parse(text = reg))
-  return(output)
-}
-
+GTA <- readRDS(file = paste0(path.data.out, "GTA_final.RData"))
+TRA <- readRDS(file = paste0(path.data.out, "TRAINS_final.RData"))
 ## 4.1 regression components  ---------------------------------------------------
 fe.vec <- names(GTA)[(column.dummy.start+11):(ncol(GTA)-2)]
 fe <- paste0(fe.vec, collapse = "+")
 
-controls.vec <- c("distw_harmonic", "comlang_off", "comcol", "contig", "comlang_ethno", 
+controls.vec <- c("log(distw_harmonic)", "comlang_off", "comcol", "contig", "comlang_ethno", 
                   "fta_wto", "lsci", "lpi", "landlocked", "geometric_avg_tariff", "FXV")
-controls <- paste0(controls, collapse = "+")
+controls <- paste0(controls.vec, collapse = "+")
 
 controls.d.vec <- c("fta_wto", "lsci", "lpi", "geometric_avg_tariff", "FXV") #exclude stuff which should not change over time
 controls.d <- paste0(controls.d.vec, collapse = "+")
@@ -295,9 +264,22 @@ mast.chap <- paste0(mast.names, collapse = "+") # Interventions disaggregated
 mast.chap.TRA <- paste0(mast.names[!grepl("liberalising", mast.names)], collapse = "+")
 ## 4.2 OLS -------------------------------------------------------------------------
 ### GTA ---------------------------------------------------------------------------
+t <- Sys.time()
+test2 <- plm(tij ~ total_harmful + total_liberalising, 
+            data = GTA,
+            index = c("dummycol3", "year"), 
+            model = "within")
+t_2 <- Sys.time()
+t_2-t
+
+t <- Sys.time()
+ols.fe        <- reg(GTA,   cont = paste0(GTA.NTM,  "+", fe));    summary(ols.fe)t_2 <- Sys.time()
+t_2 <- Sys.time()
+t_2-t
+summary(test)
 
 ols           <- reg(GTA,   cont = paste0(GTA.NTM,  "+", controls,"+", GTA.CRI)); summary(ols)
-ols.fe        <- reg(GTA,   cont = paste0(GTA.NTM,  "+", fe));                    summary(ols.fe)
+ols.fe        <- reg(GTA,   cont = paste0(GTA.NTM,  "+", fe));    summary(ols.fe)
 ols.chap      <- reg(GTA,   cont = paste0(mast.chap,"+", controls,"+", GTA.CRI)); summary(ols.chap)
 ols.fe.chap   <- reg(GTA,   cont = paste0(mast.chap,"+", controls,"+", fe));      summary(ols.fe.chap)
 
@@ -308,19 +290,20 @@ ols.d.fe.chap <- reg(GTA.d, cont = paste0(mast.chap,"+", controls.d,"+", fe)); s
 
 ### TRAINS ------------------------------------------------------------------------
 
-ols.TRA                <- reg(TRA, cont = paste0(TRA.NTM,"+", controls, "+", CRI));          summary(ols.TRA)
+ols.TRA                <- reg(TRA, cont = paste0(TRA.NTM,"+", controls, "+", TRA.CRI));      summary(ols.TRA)
 ols.fe.TRA             <- reg(TRA, cont = paste0(TRA.NTM,"+", fe));                          summary(ols.fe.TRA)
-ols.per.chapter.TRA    <- reg(TRA, cont = paste0(mast.chap.TRA,"+", controls,"+", TRA.CRI)); summary(ols.per.chapter.TRA)
-ols.fe.per.chapter.TRA <- reg(TRA, cont = paste0(mast.chap.TRA,"+", controls,"+", fe));      summary(ols.fe.per.chapter.TRA)
+ols.chap.TRA    <- reg(TRA, cont = paste0(mast.chap.TRA,"+", controls,"+", TRA.CRI)); summary(ols.chap.TRA)
+ols.fe.chap.TRA <- reg(TRA, cont = paste0(mast.chap.TRA,"+", controls,"+", fe));      summary(ols.fe.chap.TRA)
 
-ols.delta.TRA <-                reg(TRA.d, cont = paste0(TRA.NTM,"+", controls.d));               summary(ols.delta.TRA)
-ols.delta.fe.TRA <-             reg(TRA.d, cont = paste0(TRA.NTM,"+", controls.d,"+", fe));       summary(ols.delta.fe.TRA)
-ols.delta.per.chapter.TRA <-    reg(TRA.d, cont = paste0(mast.chap.TRA,"+", controls.d));         summary(ols.delta.per.chapter.TRA)
-ols.delta.fe.per.chapter.TRA <- reg(TRA.d, cont = paste0(mast.chap.TRA,"+", controls.d,"+", fe)); summary(ols.delta.fe.per.chapter.TRA)
+ols.d.TRA <-                reg(TRA.d, cont = paste0(TRA.NTM,"+", controls.d));               summary(ols.d.TRA)
+ols.d.fe.TRA <-             reg(TRA.d, cont = paste0(TRA.NTM,"+", controls.d,"+", fe));       summary(ols.d.fe.TRA)
+ols.d.chap.TRA <-    reg(TRA.d, cont = paste0(mast.chap.TRA,"+", controls.d));         summary(ols.d.chap.TRA)
+ols.d.fe.chap.TRA <- reg(TRA.d, cont = paste0(mast.chap.TRA,"+", controls.d,"+", fe)); summary(ols.d.fe.chap.TRA)
 
 ### Linreg (weighted) -------------------------------------------------------------------------
 
-ols.w    <- reg(GTA, cont = paste0(GTA.NTM,"+", controls,"+"),     weights = "CRI_sqrt_gm_harmful"); summary(ols.w) # geom mean
+# Good R2 -->investigate
+ols.w    <- reg(GTA, cont = paste0(GTA.NTM,"+", controls),         weights = "CRI_sqrt_gm_harmful"); summary(ols.w) # geom mean
 ols.fe.w <- reg(GTA, cont = paste0(GTA.NTM,"+", controls,"+", fe), weights = "CRI_sqrt_gm_harmful"); summary(ols.fe.w)
 
 # 4.3 Heckman -------------------------------------------------------------------------
@@ -331,38 +314,38 @@ library(sampleSelection)
 h.GTA <- reg(GTA, 
              type = "heckman", 
              cont =           paste0(GTA.NTM,"+", controls,"+", GTA.CRI) , 
-             cont.selection = paste0(GTA.NTM,"+", controls,"+", GTA.CRI, "+ intranat.trade")); summary(heckit)
+             cont.selection = paste0(GTA.NTM,"+", controls,"+", GTA.CRI, "+ intranat.trade")); summary(h.GTA)
 
 h.TRA <- reg(TRA, 
              type = "heckman", 
              cont =           paste0(controls,"+", TRA.NTM,"+", TRA.CRI), 
-             cont.selection = paste0(controls,"+", TRA.NTM,"+", TRA.CRI, "+ intranat.trade")); summary(heckit.TRA)
+             cont.selection = paste0(controls,"+", TRA.NTM,"+", TRA.CRI, "+ intranat.trade")); summary(h.TRA)
 
 # FE Heckit
 fe.adjust.GTA <- paste0(fe.vec[!fe.vec %in% c("CUB", "MMR","BRB","CPV","LBR","SVK", "year_2019")], collapse = "+")
 h.fe.GTA <- reg(GTA, 
                 type = "heckman", 
                 cont =           paste0(GTA.NTM,"+", fe.adjust.GTA), 
-                cont.selection = paste0(GTA.NTM,"+", fe.adjust.GTA, "+ intranat.trade")); summary(heckit.fe)
+                cont.selection = paste0(GTA.NTM,"+", fe.adjust.GTA, "+ intranat.trade")); summary(h.fe.GTA)
 
 fe.adjust.TRA <- paste0(fe.vec[! fe.vec %in% c("CUB","LBR", "CRI","SVK", "year_2019")], collapse = "+")
 h.fe.TRA <- reg(TRA, 
                 type = "heckman", 
-                cont =           paste0(TRA.NTM,"+", fe.adjust.TRA, "log(distw_harmonic) + geometric_avg_tariff"), 
-                cont.selection = paste0(TRA.NTM,"+", fe.adjust.TRA, "log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(heckit.fe.TRA)
+                cont =           paste0(TRA.NTM,"+", fe.adjust.TRA, "+ log(distw_harmonic) + geometric_avg_tariff"), 
+                cont.selection = paste0(TRA.NTM,"+", fe.adjust.TRA, "+ log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(h.fe.TRA)
 
 
 # Heckit per Chapter
 mast.names.adj <- paste0(mast.names[! mast.names %in% c("C_liberalising", "G_liberalising")], collapse = "+")
 h.fe.chap.GTA <- reg(GTA, 
                      type = "heckman", 
-                     cont =           paste0(mast.names.adj,"+", fe.vec.adjust.GTA," + log(distw_harmonic) + geometric_avg_tariff"), 
-                     cont.selection = paste0(mast.names.adj,"+", fe.vec.adjust.GTA," + log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(h.fe.chap.GTA)
+                     cont =           paste0(mast.names.adj,"+", fe.adjust.GTA," + log(distw_harmonic) + geometric_avg_tariff"), 
+                     cont.selection = paste0(mast.names.adj,"+", fe.adjust.GTA," + log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(h.fe.chap.GTA)
 
 h.fe.chap.TRA <- reg(TRA, 
                      type = "heckman", 
-                     cont =           paste0(mast.names.adj,"+", fe.vec.adjust.TRA, " + log(distw_harmonic) + geometric_avg_tariff"), 
-                     cont.selection = paste0(mast.names.adj,"+", fe.vec.adjust.TRA, " + log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(h.fe.chap.TRA)
+                     cont =           paste0(mast.names.adj,"+", fe.adjust.TRA, " + log(distw_harmonic) + geometric_avg_tariff"), 
+                     cont.selection = paste0(mast.names.adj,"+", fe.adjust.TRA, " + log(distw_harmonic) + geometric_avg_tariff + intranat.trade")); summary(h.fe.chap.TRA)
 
 
 
@@ -380,19 +363,21 @@ h.fe.chap.TRA <- reg(TRA,
 #   }
 # }
 
-# library(beepr)
-# for (i in 84:length(fe.vec.adjust.TRA)) {
-# 
-#   t <- try(eval(parse(text = paste0("selection(data = TRA, selection = is.available ~ ", "+ intranat.trade, tij ~total_harmful +", paste0(fe.vec.adjust.TRA[1:i], collapse = "+"), ", method = '2step')"))))
-# 
-#   if(!inherits(t, "try-error")){
-#     print(i)
-# 
-#   } else{
-#     cat("Error occurred when removing variable ", fe.vec.adjust.TRA[i], "\n")
-#     beep(sound = 2)
-# }
-# }
+library(beepr)
+fe.adjust.TRA.vec <- fe.vec[! fe.vec %in% c("CUB","LBR", "CRI","SVK", "year_2019")]
+
+for (i in 1:length(fe.adjust.TRA.vec)) {
+
+  t <- try(eval(parse(text = paste0("selection(data = TRA, selection = is.available ~ ",paste0(fe.adjust.TRA.vec[1:i], collapse = "+"), "+ intranat.trade, tij ~ total_harmful +", paste0(fe.adjust.TRA.vec[1:i], collapse = "+"), ", method = '2step')"))))
+
+  if(!inherits(t, "try-error")){
+    print(i)
+
+  } else{
+    cat("Error occurred when removing variable ", fe.adjust.TRA.vec[i], "\n")
+    beep(sound = 2)
+}
+}
 
 # remove libraries causing trouble
 detach("package:goft")
@@ -457,28 +442,3 @@ sigma = 8
 beta_intranat.trade <- 0.04456
 threshold <- exp(2*(sigma-1))/beta_intranat.trade
 threshold_sqrt <- sqrt(threshold)
-
-
-
-
-### PPML -------------------------------------------------------------------------
-# library(gravity)
-# 
-# ppml <- ppml(data = GTA, 
-#      dependent_variable = "tij", 
-#      distance = "distw_harmonic", 
-#      additional_regressors = c("total","comlang_off", "comcol", 
-#                                "contig", "comlang_ethno", "fta_wto", "lsci", 
-#                                  "lpi", "landlocked", "geometric_avg_tariff", "coverage.mean"))
-# summary(ppml)
-# 
-# 
-# ppml.fixed <- "ppml.fixed <- ppml(data = GTA, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('total','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
-# ppml.fixed <- paste0(ppml.fixed,"'", paste0(names(GTA)[column.dummy.start:ncol(GTA)], collapse = "','" ),"'", "))")
-# eval(parse(text = ppml.fixed))
-# summary(ppml.fixed)
-# 
-# ### Bind together
-# names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
-# names(heckit$lm$qr) <- gsub("XO", "", names(heckit$qr$coefficients))
-# 

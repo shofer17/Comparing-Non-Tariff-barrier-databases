@@ -70,6 +70,32 @@ to_alphabeta <- function(data, column.name.1, column.name.2){
 }
 
 
+
+# Run a regression based on string inputs that makes handling of many controls easier
+# Also, have Heckman and lm option
+reg <- function(data,type = "lm", 
+                dependant = "tij", 
+                cont, 
+                dependant.selection = "is.available", 
+                cont.selection,
+                weights = NULL){
+  
+  if(type == "lm"){
+    reg <- paste0("lm(data = data,", dependant, " ~", cont, ", weights = ",weights,")")
+  }
+  
+  if(type == "heckman"){
+    
+    reg <- paste0("selection(", dependant.selection, "~", cont.selection, ",", 
+                  dependant,           "~", cont, ",",
+                  "method = '2step', data = data)")
+  }
+  
+  reg <- paste0("output <- ", reg)
+  eval(parse(text = reg))
+  return(output)
+}
+
 # 1. standard frame -------------------------------------------
 
 #add 0 measure pairs
