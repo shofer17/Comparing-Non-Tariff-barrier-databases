@@ -88,7 +88,7 @@ reg <- function(data,type = "lm",
     
     reg <- paste0("selection(", dependant.selection, "~", cont.selection, ",", 
                   dependant,           "~", cont, ",",
-                  "method = '2step', data = data)")
+                  "method = '2step', data = data, weights = ",weights ,")")
   }
   
   reg <- paste0("output <- ", reg)

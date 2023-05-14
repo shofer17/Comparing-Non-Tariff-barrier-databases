@@ -1,6 +1,6 @@
-# The simulations tries to understand the influence of modeling asymetric trade 
-# costs with symmetrically. To do this, a linear model is assumed and generated.
-# To keep the simulation to as close to reality as possible, the 
+# The simulations tries to understand how the econometric approaches utilized, based on
+# assumptions for the data generating process, influences the results. 
+# To do this, a linear model is assumed and generated.
 
 library(ggplot2)
 library(ggpubr)
@@ -15,16 +15,26 @@ source("BA_Thesis_code/00 Terms and Definitions.R")
 
 # 1. get data --------------------------------------------------------------
 
-trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
-#data <- readRDS(file = paste0(path.data.out, "TRAINS_symmetric_w_controls.RData"))
-#data <- readRDS(file = paste0(path.data.out, "GTA_symmetric_w_controls.RData"))
-controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
+# trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
+# controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
 GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index.xlsx"))
-GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
+# GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
+
+GTA.d <- readRDS(file = paste0(path.data.out, "GTA_delta_final.RData"))
+TRA.d <- readRDS(file = paste0(path.data.out, "TRAINS_delta_final.RData"))
+
+GTA <- readRDS(file = paste0(path.data.out, "GTA_final.RData"))
+TRA <- readRDS(file = paste0(path.data.out, "TRAINS_final.RData"))
+
+GTA <- GTA %>% filter(chapter == "D")
+TRA <- TRA %>% filter(chapter == "D")
+GTA.d <- GTA.d %>% filter(chapter == "D")
+TRA.d <- TRA.d %>% filter(chapter == "D")
 
 
 # 2. preliminary checks --------------------------------------------------------
 # check if assumed relationship (higher share of NAs in trade costs --> higher trade costs, lower GDP)
+
 
 if(F){
   trade.costs <- merge(trade.costs, controls[, c("iso3_o","iso3_d","gdp_o","gdp_d", "year")], by.x = c("country.1", "country.2", "year"), by.y = c("iso3_o", "iso3_d", "year"))
@@ -89,10 +99,16 @@ a <- 0.9
 # Get max empirical CRI --------------------------------------------------------
 
 GTA.coverage <- GTA.coverage %>% 
-  filter(chapter == "D")
-CRI <- max(na.omit(GTA.coverage$coverage.measure.sqrt))
+  filter(chapter == "D") %>%
+  left_join(unique(GTA[, c("country.1","year", "gdp_o")]), by = c("country" = "country.1", "year" = "year"))%>%
+  mutate(CRI_harm =  max(na.omit(CRI_sqrt[country == "USA" & gta.evaluation == "harmful"])))%>%
+  mutate(CRI_lib =   max(na.omit(CRI_sqrt[country == "ARG" & gta.evaluation == "liberalising"])))
 
-GTA.coverage$simulated.interventions <- (CRI * sqrt(GTA.coverage$gdp_o)) /a
+GTA.coverage$num.int <- ifelse(GTA.coverage$gta.evaluation == "harmful", 
+               GTA.coverage$CRI_harm * sqrt(GTA.coverage$gdp_o)/a,
+               GTA.coverage$CRI_lib * sqrt(GTA.coverage$gdp_o)/a)
+
+
 GTA.coverage <- GTA.coverage %>% 
   filter(intervention.id != 0)
 #GTA.coverage$intervention.id <- ifelse(GTA.coverage$intervention.id == 0, 1, GTA.coverage$intervention.id) #if we know of know intervention, set to 1 for scaling up, otherwise infinite scale up
