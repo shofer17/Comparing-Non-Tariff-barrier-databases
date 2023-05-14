@@ -8,31 +8,51 @@ GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
 TRAINS <- readRDS(file = paste0(path.data.out, "TRAINS_asymmetric_isic.RData"))
 controls <- readRDS(paste0(path.data.raw, "CEPII_Gravity_Variables.Rds")) 
 
-grid.coverage <- expand.grid(selected.countries, years.observation, c("AB", "D", "GTT"), c("harmful", "liberalising"))
-names(grid.coverage) <- c("country", "year", "chapter", "gta.evaluation")
+grid.coverage <- expand.grid(selected.countries, years.observation, c("AB", "D", "GTT"))
+names(grid.coverage) <- c("country", "year", "chapter")
 
 # 1. data prep -----------------------------------------------------------------
 ## GTA -------------------------------------------------------------------------
 # Aggregate intervetions
-GTA <- GTA %>% 
+# 
+GTA.chapter <- GTA %>%
   filter(mast.chapter %in% selected.mast)%>%
   filter(implementing.jurisdiction %in% selected.countries)%>%
-  select(c(implementing.jurisdiction, years.in.force, chapter, intervention.id, gta.evaluation))%>%
+  select(c(implementing.jurisdiction, years.in.force, chapter, intervention.id))%>%
   cSplit("years.in.force", direction = "long") %>%
   cSplit("chapter", direction = "long")%>%
-  aggregate(intervention.id ~ years.in.force + chapter + implementing.jurisdiction + gta.evaluation, FUN = function(x) length(unique(x)))
+  aggregate(intervention.id ~ years.in.force + chapter + implementing.jurisdiction, FUN = function(x) length(unique(x)))
 
-write.csv(unique(GTA$implementing.jurisdiction), paste0(path.data.reg, "GTA_non_zero_countries.csv"),row.names = F)
-
-# add 0s for combinations without intervention
 GTA <- GTA %>%
-  pivot_wider(id_cols = c("years.in.force", "implementing.jurisdiction", "gta.evaluation"), 
-              names_from = "chapter", 
-              values_from = "intervention.id")%>%
-  mutate(AB = ifelse(is.na(AB), 0, AB))%>%
-  mutate(D = ifelse(is.na(D), 0, D))%>%
-  mutate(GTT = AB + D)%>%
-  pivot_longer(cols = 4:ncol(.), names_to = "chapter", values_to = "intervention.id")
+  filter(mast.chapter %in% selected.mast)%>%
+  filter(implementing.jurisdiction %in% selected.countries)%>%
+  select(c(implementing.jurisdiction, years.in.force, chapter, intervention.id))%>%
+  cSplit("years.in.force", direction = "long") %>%
+  aggregate(intervention.id ~ years.in.force + implementing.jurisdiction, FUN = function(x) length(unique(x)))%>%
+  mutate(chapter = "GTT")
+GTA <- rbind(GTA, GTA.chapter)
+
+
+#OLD Split to harmful and Lib
+# GTA <- GTA %>% 
+#   filter(mast.chapter %in% selected.mast)%>%
+#   filter(implementing.jurisdiction %in% selected.countries)%>%
+#   select(c(implementing.jurisdiction, years.in.force, chapter, intervention.id, gta.evaluation))%>%
+#   cSplit("years.in.force", direction = "long") %>%
+#   cSplit("chapter", direction = "long")%>%
+#   aggregate(intervention.id ~ years.in.force + chapter + implementing.jurisdiction, FUN = function(x) length(unique(x)))
+# 
+# write.csv(unique(GTA$implementing.jurisdiction), paste0(path.data.reg, "GTA_non_zero_countries.csv"),row.names = F)
+# 
+# # add 0s for combinations without intervention
+# GTA <- GTA %>%
+#   pivot_wider(id_cols = c("years.in.force", "implementing.jurisdiction"), 
+#               names_from = "chapter", 
+#               values_from = "intervention.id")%>%
+#   mutate(AB = ifelse(is.na(AB), 0, AB))%>%
+#   mutate(D = ifelse(is.na(D), 0, D))%>%
+#   mutate(GTT = AB + D)%>%
+#   pivot_longer(cols = 3:ncol(.), names_to = "chapter", values_to = "intervention.id")
 
 
 ## TRAINS -------------------------------------------------------------------------
@@ -69,12 +89,12 @@ controls <- controls %>%
 # 2. Combine data --------------------------------------------------------------
 # combine
 GTA <- grid.coverage %>%
-  left_join(GTA, by = c("country" ="implementing.jurisdiction" , "year" = "years.in.force", "chapter", "gta.evaluation"))%>%
+  left_join(GTA, by = c("country" ="implementing.jurisdiction" , "year" = "years.in.force", "chapter"))%>%
   mutate(intervention.id = ifelse(is.na(intervention.id), 0, intervention.id))%>%
   left_join(controls, by = c("country" = "iso3_o", "year"))
 
-saveRDS(GTA, file = paste0(path.data.out, "GTA_interventions.Rds"))
-GTA <- readRDS(file = paste0(path.data.out, "GTA_interventions.Rds"))
+saveRDS(GTA, file = paste0(path.data.out, "GTA_interventions_total.Rds"))
+GTA <- readRDS(file = paste0(path.data.out, "GTA_interventions_total.Rds"))
 
 TRAINS <- grid.coverage %>%
   select(-gta.evaluation)%>%
@@ -96,15 +116,15 @@ TRAINS <- TRAINS %>%
   select(-c(measure.id, gdp_o))
 
 
-writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index.xlsx"))
-GTA <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index.xlsx"))
+writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index total.xlsx"))
+GTA <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index total.xlsx"))
 
 
 #make bilateral
 help <- merge(grid, GTA, by.x = c("country.1", "year", "chapter"), 
               by.y = c("country", "year", "chapter"), all.x = T)
-GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter", "gta.evaluation"), 
-             by.y = c("country", "year", "chapter", "gta.evaluation"),all.x = T)
+GTA <- merge(help, GTA, by.x = c("country.2", "year", "chapter"), 
+             by.y = c("country", "year", "chapter"),all.x = T)
 GTA <- GTA %>% 
   filter(year %in% years.observation)
 

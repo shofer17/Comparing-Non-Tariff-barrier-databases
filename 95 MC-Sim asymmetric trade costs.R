@@ -17,7 +17,7 @@ source("BA_Thesis_code/00 Terms and Definitions.R")
 
 # trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
 # controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
-GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index.xlsx"))
+GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index total.xlsx"))
 # GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
 
 GTA.d <- readRDS(file = paste0(path.data.out, "GTA_delta_final.RData"))
@@ -100,13 +100,10 @@ a <- 0.9
 
 GTA.coverage <- GTA.coverage %>% 
   filter(chapter == "D") %>%
-  left_join(unique(GTA[, c("country.1","year", "gdp_o")]), by = c("country" = "country.1", "year" = "year"))%>%
-  mutate(CRI_harm =  max(na.omit(CRI_sqrt[country == "USA" & gta.evaluation == "harmful"])))%>%
-  mutate(CRI_lib =   max(na.omit(CRI_sqrt[country == "ARG" & gta.evaluation == "liberalising"])))
-
-GTA.coverage$num.int <- ifelse(GTA.coverage$gta.evaluation == "harmful", 
-               GTA.coverage$CRI_harm * sqrt(GTA.coverage$gdp_o)/a,
-               GTA.coverage$CRI_lib * sqrt(GTA.coverage$gdp_o)/a)
+  left_join(unique(GTA[, c("country.1","year", "gdp_o")]), by = c("country" = "country.1", "year" = "year"))
+  
+CRI_max <- max(GTA.coverage$CRI_sqrt[GTA.coverage$country == "USA"])
+GTA.coverage$simulated.interventions <- CRI_max * sqrt(GTA.coverage$gdp_o)/a
 
 
 GTA.coverage <- GTA.coverage %>% 

@@ -20,6 +20,7 @@ path.plot <- "2 plots/"
 
 # available countries and MAST
 selected.countries <- read.csv(file = paste0(path.data.out, "selected countries.csv"))$x
+selected.countries <- selected.countries[!selected.countries %in% c("CUB", "VEN")]
 selected.mast <- read.csv(file = paste0(path.data.out, "selected MAST chapters.csv"))$x
 selected.mast.red <- selected.mast[!selected.mast %in% c("N")]
 mast.names <- c(paste0(selected.mast[!selected.mast %in% "N"], "_harmful"), paste0(selected.mast[!selected.mast %in% "N"], "_liberalising"))
