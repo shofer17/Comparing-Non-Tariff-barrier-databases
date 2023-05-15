@@ -15,22 +15,10 @@ source("BA_Thesis_code/00 Terms and Definitions.R")
 
 # 1. get data --------------------------------------------------------------
 
-# trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
-# controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
+trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData"))
+controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
 GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index total.xlsx"))
-# GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
-
-GTA.d <- readRDS(file = paste0(path.data.out, "GTA_delta_final.RData"))
-TRA.d <- readRDS(file = paste0(path.data.out, "TRAINS_delta_final.RData"))
-
-GTA <- readRDS(file = paste0(path.data.out, "GTA_final.RData"))
-TRA <- readRDS(file = paste0(path.data.out, "TRAINS_final.RData"))
-
-GTA <- GTA %>% filter(chapter == "D")
-TRA <- TRA %>% filter(chapter == "D")
-GTA.d <- GTA.d %>% filter(chapter == "D")
-TRA.d <- TRA.d %>% filter(chapter == "D")
-
+GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
 
 # 2. preliminary checks --------------------------------------------------------
 # check if assumed relationship (higher share of NAs in trade costs --> higher trade costs, lower GDP)
@@ -113,104 +101,85 @@ GTA.coverage$scaled.up <- GTA.coverage$simulated.interventions/GTA.coverage$inte
 
 
 #scale up
+
 GTA <- unique(cSplit(GTA, "chapter", direction = "long"))
 GTA <- unique(cSplit(GTA, "years.in.force", direction = "long"))
+GTA <- GTA %>% filter(chapter == "D")
 
 data.out <- data.frame()
 
 for(i in years.observation){
   data.loop <- GTA %>% filter(years.in.force == i)
   
-  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force + chapter + gta.evaluation, FUN = function(x) length(unique(x)))
+  data.loop <- aggregate(data = data.loop, intervention.id ~ implementing.jurisdiction + affected.jurisdiction + years.in.force, FUN = function(x) length(unique(x)))
   
   data.out <- rbind(data.out, data.loop)
 }
 
-names(data.out) <- c("country.1", "country.2", "year","chapter","gta.evaluation",  "number.of.interventions")
-
-data.out <- pivot_wider(data.out, id_cols = 1:4, names_from = "chapter", values_from = "number.of.interventions")
-data.out$AB <- ifelse(is.na(data.out$AB), 0, data.out$AB)
-data.out$D <- ifelse(is.na(data.out$D), 0, data.out$D)
-data.out$GTT <- data.out$AB + data.out$D
-data.out <- pivot_longer(data.out, cols = 5:ncol(data.out), names_to = "chapter", values_to = "number.of.interventions")
-data.out <- pivot_wider(data.out, id_cols = c("country.1", "country.2", "year", "chapter"), names_from = "gta.evaluation", values_from = "number.of.interventions")
-data.out[is.na(data.out)] <- 0
-
+names(data.out) <- c("country.1", "country.2", "year","number.of.interventions")
 data.out <- data.out %>% 
-  filter(chapter == "D") %>% 
-  left_join(GTA.coverage[, c("implementing.jurisdiction", "years.in.force", "scaled.up")], c("country.1" = "implementing.jurisdiction", "year" = "years.in.force"))%>%
-  mutate(harmful = harmful * scaled.up)%>%
-  mutate(liberalising = liberalising * scaled.up)%>%
+  left_join(GTA.coverage[, c("country", "year", "scaled.up")], c("country.1" = "country", "year"))%>%
+  mutate(number.of.interventions = number.of.interventions * scaled.up)%>%
   select(-scaled.up)
 
 data.out <- to_alphabeta(data.out, "country.1", "country.2")
-data.out <- aggregate(data = data.out, cbind(liberalising, harmful) ~country.1 + country.2 + year, FUN = sum)
+data.out <- aggregate(data = data.out, number.of.interventions ~country.1 + country.2 + year, FUN = sum)
 data.out <- data.out %>%
-  mutate(harmful = round(harmful))%>%
-  mutate(liberalising = round(liberalising))
+  mutate(number.of.interventions = round(number.of.interventions))
 
-rm(GTA.coverage, GTA.coverage.year, grid, data.loop, GTA)
+rm(GTA.coverage, grid, data.loop, GTA)
+
+data.out <- grid.observed %>%
+  filter(chapter == "D")%>%
+  select(-c(chapter))%>%
+  left_join(data.out, by = c("country.1", "country.2", "year"))%>%
+  mutate(int = ifelse(is.na(number.of.interventions), 0, number.of.interventions))
+
 
 # 2.2 Create model -----------------------------------------------------------------
-GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
-GTA.measurement <- GTA.measurement %>% filter(chapter == "D")
-controls <- controls %>% filter(chapter == "D")
+GTA.total <- readRDS(file = paste0(path.data.out, "GTA_final.RData"))
+GTA.total <- GTA.total %>%
+  filter(chapter == "D") %>%
+  select(-c(mast.names, "tij", "L_harmful", "L_liberalising"))
 
-# add GDP
-sim.data <- data.out %>% 
-  left_join(controls, by = c("country.1", "country.2", "year")) %>% 
-  mutate(gdp_o = ifelse(is.na(gdp_o), gdp_d, gdp_o))%>%
-  mutate(gdp_d = ifelse(is.na(gdp_d), gdp_o, gdp_d))%>%
-  filter(!is.na(gdp_o)) 
-sim.data$gdp <- apply(sim.data[ , c("gdp_d", "gdp_o")], 1, FUN = function(x) exp(mean(log(x))))
+GTA.total <- data.out %>%
+  left_join(GTA.total, by = c("country.1", "country.2", "year"))
 
-#add CRI
-
-t <- sim.data %>%
-  left_join(GTA.measurement, by = c("country.1", "country.2", "year")) %>%
-  mutate(lpi = ifelse(is.na(lpi), 0, lpi)) %>%
-  left_join(trade.costs[, c("country.1", "country.2", "year", "geometric_avg_tariff")], by = c("country.1", "country.2", "year"))
-
-
-# create model
-
-sim.data$geometric_avg_tariff <- ifelse(is.na(sim.data$geometric_avg_tariff), 0, sim.data$geometric_avg_tariff)
-perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
-
-
+GTA.total$old.int.trade <- GTA.total$intranat.trade^(14)
+GTA.total$old.int.trade <- GTA.total$old.int.trade^(1/10)
 ### Regresson ------------------------------------------------------------------
-#values are roughly what Arvics et al. (2016) estimated
-b_0 <- 20 #not from arivs
-b_1 <- 0.1 # measures (not from arvis)
-b_2 <- 40 # distance (not from arvis)
-b_3 <- -40 # common border
-b_4 <- -5 #common language ethno
-b_5 <- -15 #common RTA
-b_6 <- -10 #common language official
-b_7 <- -15 #common colony
+b_0 <- -100
+b_1 <- 0.1 # measures 
+b_2 <- 50 # distance 
+b_3 <- -50 # common border
+b_4 <- -10 #common language ethno
+b_5 <- -20 #common RTA
+b_6 <- -30 #common language official
+b_7 <- -10 #common colony
 b_8 <- -1 # LSCI
-b_9 <- -10 # LPI
-b_10 <- 20 #Landlocked
-b_11 <- 1 #Tariffs
-b_12 <- -12 # log(GDP) for censoring   //b_12 <- -0.0000031523
+b_9 <- -100 # LPI
+b_10 <- 40 #Landlocked
+b_11 <- 50 #Tariffs
 sigma <- 8
-
-
+perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
+gamma <- 450000000000000
+names(sim)[names(sim) == "number.of.interventions"] <- "int"
 #get error term
 library(MASS)
-bivariate_data <- as.data.frame(mvrnorm(n=nrow(sim.data),
+bivariate_data <- as.data.frame(mvrnorm(n=nrow(GTA.total),
                                         mu=c(0, 0),
-                                        Sigma=matrix(c(10, 4, 4,10), ncol=2)))
+                                        Sigma=matrix(c(100, 10, 10,100), ncol=2)))
 
-sim.data$exports <- (sim.data$exports_d * sim.data$exports_o)^(1/(2*(sigma-1)))
+sim <- GTA.total
+sim <- sim %>%
+  mutate(tij = b_0+b_1*int +b_2*log(distw_harmonic)+b_3*contig+b_4*comlang_ethno+b_5*fta_wto+b_6*comlang_off+b_7*comcol+b_8*lsci+b_9*lpi+b_10*landlocked+b_11*geometric_avg_tariff+bivariate_data$V1)
+sim$tij <- ifelse(sim$tij<0, 0, sim$tij)
 
-# Please note: here plus 1 is added instad of -1 in the derivation because here everything is reversed (trade costs are positive compared to the derivation where they are negative). That makes the interpretation of the terms easier. 
-sim.data$censoring.thresold <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + b_12 *sim.data$exports + 1 + bivariate_data$V1 #
-sim.data$is.censord  <- sim.data$censoring.thresold  > 0
-perc.censored.synth <- sum(sim.data$is.censord)/nrow(sim.data) #potentially adjust weights of log(GDP)
+sim$is.censored <- ifelse(0 < (1/gamma)^(1/(2*(sigma-1))) * sim$intranat.trade - sim$tij/100-1, 0, 1) #division by 100 is becauase the tij are measured in AVE, so in percent
+sum(na.omit(sim$is.censored)/nrow(sim))
+sim$tij.censored <- ifelse(sim$is.censored == 1, NA, sim$tij)
 
-sim.data$trade.costs <- b_0 + b_1 * sim.data$total + b_2 * log(sim.data$distw_harmonic) + b_3 * sim.data$contig + b_4 * sim.data$comlang_ethno  + b_5 * sim.data$fta_wto+ b_6 *sim.data$comlang_off + b_7 * sim.data$comcol + b_8 * sim.data$lsci + b_9 * sim.data$lpi + b_10 * sim.data$landlocked  + b_11 * sim.data$geometric_avg_tariff + bivariate_data$V2 #
-sim.data$trade.costs.recorded <- sim.data$trade.costs * (sim.data$is.censord < 1)
+
 
 
 t_out <- sampleSelection::selection(data = sim.data,
