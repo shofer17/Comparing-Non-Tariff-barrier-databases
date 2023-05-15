@@ -140,7 +140,9 @@ data.out <- grid.observed %>%
 GTA.total <- readRDS(file = paste0(path.data.out, "GTA_final.RData"))
 GTA.total <- GTA.total %>%
   filter(chapter == "D") %>%
-  select(-c(mast.names, "tij", "L_harmful", "L_liberalising"))
+  select(-c(mast.names, "tij", "L_harmful", "L_liberalising"))%>%
+  mutate(interventions.revealed = total_harmful + total_liberalising)%>%
+  select(-c("total_harmful", "total_liberalising"))
 
 GTA.total <- data.out %>%
   left_join(GTA.total, by = c("country.1", "country.2", "year"))
@@ -148,7 +150,7 @@ GTA.total <- data.out %>%
 GTA.total$old.int.trade <- GTA.total$intranat.trade^(14)
 GTA.total$old.int.trade <- GTA.total$old.int.trade^(1/10)
 ### Regresson ------------------------------------------------------------------
-b_0 <- -100
+b_0 <- 500
 b_1 <- 0.1 # measures 
 b_2 <- 50 # distance 
 b_3 <- -50 # common border
@@ -162,179 +164,72 @@ b_10 <- 40 #Landlocked
 b_11 <- 50 #Tariffs
 sigma <- 8
 perc.censored.real <- sum(is.na(trade.costs$tij))/nrow(trade.costs)
-gamma <- 450000000000000
-names(sim)[names(sim) == "number.of.interventions"] <- "int"
+perc.not.censored.real <- sum(!is.na(trade.costs$tij))/nrow(trade.costs)
+
+gamma <- 7000000000000
 #get error term
-library(MASS)
-bivariate_data <- as.data.frame(mvrnorm(n=nrow(GTA.total),
+
+sim <- GTA.total %>%
+  filter(!is.na(geometric_avg_tariff))%>%
+  filter(!is.na(lpi)) %>%
+  select(-c(all_of(selected.countries[!selected.countries %in% "ZWE"])))%>%
+  select(-c(all_of(paste0("year_",years.observation))))
+
+names(sim)[names(sim) == "number.of.interventions"] <- "int"
+
+bivariate_data <- as.data.frame(MASS::mvrnorm(n=nrow(sim),
                                         mu=c(0, 0),
-                                        Sigma=matrix(c(100, 10, 10,100), ncol=2)))
+                                        Sigma=matrix(c(200, 100, 100,200), ncol=2)))
 
-sim <- GTA.total
+
 sim <- sim %>%
-  mutate(tij = b_0+b_1*int +b_2*log(distw_harmonic)+b_3*contig+b_4*comlang_ethno+b_5*fta_wto+b_6*comlang_off+b_7*comcol+b_8*lsci+b_9*lpi+b_10*landlocked+b_11*geometric_avg_tariff+bivariate_data$V1)
-sim$tij <- ifelse(sim$tij<0, 0, sim$tij)
+  mutate(tij = b_0+b_1*int +b_4*comlang_ethno+b_5*fta_wto+b_6*comlang_off+b_7*comcol+b_8*lsci+b_9*lpi+b_11*geometric_avg_tariff+bivariate_data$V1)%>%
+  mutate(tij_pure = b_0+b_1*int +b_4*comlang_ethno+b_5*fta_wto+b_6*comlang_off+b_7*comcol+b_8*lsci+b_9*lpi+b_11*geometric_avg_tariff)
+sim$tij <- ifelse(sim$tij < 0, 0, sim$tij)
 
-sim$is.censored <- ifelse(0 < (1/gamma)^(1/(2*(sigma-1))) * sim$intranat.trade - sim$tij/100-1, 0, 1) #division by 100 is becauase the tij are measured in AVE, so in percent
-sum(na.omit(sim$is.censored)/nrow(sim))
-sim$tij.censored <- ifelse(sim$is.censored == 1, NA, sim$tij)
+sim$is.not.censored <- 0 < (1/gamma)^(1/(2*(sigma-1))) * sim$intranat.trade*100 - sim$tij -100 + bivariate_data$V2 #division by 100 is because the tij are measured in AVE, so in percent
+sum(na.omit(sim$is.not.censored)/nrow(sim))
+sim$tij.censored <- sim$tij * (sim$is.not.censored  > 0) 
+sim$tij.censored.na <- ifelse(sim$is.not.censored  > 0, sim$tij, NA)
+
+mc.ols.pure <- lm(data = sim,                  tij_pure  ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols.pure)
+
+mc.ols <- lm(data = sim,                       tij.censored.na  ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols)
+mc.heckit <- sampleSelection::selection(data = sim,
+                                    selection = is.not.censored ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff + intranat.trade, 
+                                    outcome =   tij.censored.na ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff
+                                    )
+summary(mc.heckit)
 
 
+saveRDS(list(mc.ols, mc.heckit, mc.ols.pure), file = paste0(path.data.out, "MC_results.Rds"))
 
+library(texreg)
+texreg(list(mc.ols, mc.heckit, mc.ols.pure))
 
-t_out <- sampleSelection::selection(data = sim.data,
-                                    !is.censord ~ log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff + exports, 
-                                    trade.costs.recorded ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + landlocked + geometric_avg_tariff)
-summary(t_out)
-
-
-hist(sim.data$trade.costs, breaks = 100, xlim = range(0,600))
-hist(trade.costs$tij, breaks = 100, xlim = range(0,600))
-
-ggplot(data= sim.data, aes(x = total.revealed, y = coverage.mean))+
-  geom_point()
+ggplot(data= sim, aes(x = interventions.revealed, y = CRI_sqrt_gm_harmful))+
+  geom_point()+
+  geom_smooth(method = "lm")
 
 # 2.4 test if censored countries are correct -----------------------------------
-sim.data$trade.costs.recorded.na <- ifelse(sim.data$trade.costs.recorded == 0, NA, sim.data$trade.costs.recorded)
-censored.data <- merge(trade.costs[, c("country.1", "country.2", "year", "tij")],
-                       sim.data[, c("country.1", "country.2", "year", "trade.costs.recorded.na")],
+censored.data <- merge(trade.costs[trade.costs$chapter == "D", c("country.1", "country.2", "year", "tij")],
+                       sim[, c("country.1", "country.2", "year", "is.censored")],
                        by =  c("country.1", "country.2", "year")
 )
 
 #get matrix to check if the correct values are censored
-censored.data$correct <- ifelse(is.na(censored.data$tij) & is.na(censored.data$trade.costs.recorded.na) , "11",
-                                ifelse(is.na(censored.data$tij) & !is.na(censored.data$trade.costs.recorded.na) , "10",
-                                       ifelse(!is.na(censored.data$tij) & is.na(censored.data$trade.costs.recorded.na), "01",
-                                              ifelse(!is.na(censored.data$tij) & !is.na(censored.data$trade.costs.recorded.na),"00", NA))))
+censored.data$correct <- ifelse(is.na(censored.data$tij) & censored.data$is.censored , "11",
+                                ifelse(is.na(censored.data$tij) & !censored.data$is.censored , "10",
+                                       ifelse(!is.na(censored.data$tij) & !censored.data$is.censored, "01",
+                                              ifelse(!is.na(censored.data$tij) & censored.data$is.censored,"00", NA))))
 censored.data$comparison <- 1
 censored.data <- aggregate(data = censored.data, comparison ~ correct, sum)
 sum(censored.data[c(1,4), 2])/sum(censored.data$comparison)
 # could play around with variables to adjust and maximise that number.
 
 
-# 2.5 regressions --------------------------------------------------------------
-## Setup -----------------------------------------------------------------------
-
-library(mixtools)
-library(censReg)
-library(plm)
-library(fastDummies)
-
-GTA.measurement <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
-sim.data.lin <- merge(sim.data, GTA.measurement, by = c("country.1", "country.2", "year", "chapter"))
-sim.data.lin <- dummy_cols(sim.data.lin, select_columns = "country.1")
-
-column.dummy.start <- min(grep("country.1.", names(sim.data.lin)))
-
-names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)] <- substr(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], 11,13)
-#sim.data.lin$ZWE <- 0 #correct for last country in country.2
-
-for(i in column.dummy.start:ncol(sim.data.lin)){ # create dummies and add both countries
-  sim.data.lin[,i] <- ifelse((sim.data.lin[, "country.1"] == names(sim.data.lin)[i]) |
-                          (sim.data.lin[, "country.2"] == names(sim.data.lin)[i]), 
-                        1,0)
-}
-
-#rm(controls, data.out, trade.costs, data, GTA.measurement)
-backup <- sim.data.lin
-
-sim.data$trade.costs.recorded.na <- ifelse(sim.data$trade.costs.recorded == 0, NA, sim.data$trade.costs.recorded)
-
-lin <- "lm(data = sim.data,"
-reg <- "trade.costs.recorded.na ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff + coverage.mean"
-reg.CRI.exl <- "trade.costs ~ total.revealed + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff"
-fe  <- paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "+" )
-
-test <- sim.data %>% filter(!is.na(coverage.mean))
-ggplot(test, aes(x = coverage.mean.log, y = total.revealed))+
-  geom_point()+
-  geom_smooth(method = "lm")
-
-### Linreg -------------------------------------------------------------------------
-
-linreg <- eval(parse(text = paste0(lin,reg,")")))
-summary(linreg)
-
-linreg.fixed <- eval(parse(text = paste0(lin,reg,"+",fe, ")")))
-summary(linreg.fixed)
-
-
-### Linreg (weighted) -------------------------------------------------------------------------
-
-# Geometric mean weights
-linreg.weighted.geom <- eval(parse(text = paste0(lin,reg.CRI.exl,",","weights = coverage.geom.mean",")")))
-summary(linreg.weighted.geom)
-linreg.weighted.fixed.geom <- eval(parse(text = paste0(lin,reg.CRI.exl,"+",fe,",","weights = coverage.geom.mean",")")))
-summary(linreg.weighted.fixed.geom)
-
-# arithm mean weights
-linreg.weighted <- eval(parse(text = paste0(lin,reg.CRI.exl,",","weights = coverage.mean",")")))
-summary(linreg.weighted)
-linreg.weighted.fixed <- eval(parse(text = paste0(lin,reg.CRI.exl,"+",fe,",","weights = coverage.mean",")")))
-summary(linreg.weighted.fixed)
-
-library(texreg)
-texreg(list(linreg, linreg.fixed, linreg.weighted.mean, linreg.weighted.fixed.mean,  linreg.weighted.geom, linreg.weighted.fixed.geom) )
-
-
-### Heckman -------------------------------------------------------------------------
-
-sim.data.lin$is.available <- ifelse(sim.data.lin$trade.costs == 0, 0, 1)
-sim.data.lin <- relocate(sim.data.lin, is.available, .before = total.revealed)
-library(sampleSelection)
-heckit <- selection(is.available ~ total + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff + log(gdp),
-                    trade.costs ~ total + log(distw_harmonic) + contig + comlang_ethno  + fta_wto + comlang_off + comcol + lsci + lpi +landlocked  + geometric_avg_tariff,
-                    method = "2step",
-                    data = sim.data.lin)
-summary(heckit)
-
-
-
-
-
-
-#CHECK COVERAGE MEAN NA
-
-
-heckman.fixed <- "heckman.fixed <- selection(is.available ~ log(distw_harmonic) + contig + fta_wto + lpi + landlocked, trade.costs ~ total.revealed + log(distw_harmonic) +  contig + comlang_ethno + fta_wto + lsci + lpi + landlocked + geometric_avg_tariff + coverage.mean"
-heckman.fixed <- paste0(heckman.fixed,"+", paste0(names(sim.data.lin)[100:ncol(sim.data.lin)], collapse = "+" ),',method = "2step",data = sim.data.lin)')
-eval(parse(text = heckman.fixed))
-summary(heckman.fixed)
-
 
 detach("package:goft")
 detach("package:fitdistrplus")
 detach("package:MASS")
 
-names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
-names(heckit$lm$qr) <- gsub("XO", "", heckit$lm$qr[1])
-names(heckit$lm$effects) <- gsub("XO", "", names(heckit$lm$effects))
-names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
-
-t <- texreg(list(linreg, linreg.fixed, linreg.weighted.geom, linreg.weighted.fixed.geom, heckit))
-colnames(heckit$lm$qr[[1]]) <- gsub("XO", "", colnames(heckit$lm$qr[[1]]))
-test <- colnames(heckit$lm$qr[[1]])
-
-### PPML -------------------------------------------------------------------------
-library(gravity)
-
-ppml <- ppml(data = sim.data.lin, 
-             dependent_variable = "tij", 
-             distance = "distw_harmonic", 
-             additional_regressors = c("total.revealed","comlang_off", "comcol", 
-                                       "contig", "comlang_ethno", "fta_wto", "lsci", 
-                                       "lpi", "landlocked", "geometric_avg_tariff", "coverage.mean"))
-summary(ppml)
-
-
-ppml.fixed <- "ppml.fixed <- ppml(data = sim.data.lin, dependent_variable = 'tij', distance = 'distw_harmonic', additional_regressors = c('total.revealed','comlang_off', 'comcol', 'contig', 'comlang_ethno', 'fta_wto', 'lsci', 'lpi', 'landlocked', 'geometric_avg_tariff', 'coverage.mean',"
-ppml.fixed <- paste0(ppml.fixed,"'", paste0(names(sim.data.lin)[column.dummy.start:ncol(sim.data.lin)], collapse = "','" ),"'", "))")
-eval(parse(text = ppml.fixed))
-summary(ppml.fixed)
-
-### Bind together
-names(heckit$lm$coefficients) <- gsub("XO", "", names(heckit$lm$coefficients))
-names(heckit$lm$qr) <- gsub("XO", "", names(heckit$qr$coefficients))
-
-library(texreg)
-texreg(list(linreg, linreg.fixed, heckit, heckman.fixed, ppml, ppml.fixed) )

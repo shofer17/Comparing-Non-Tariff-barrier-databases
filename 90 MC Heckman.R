@@ -5,14 +5,18 @@ library("mvtnorm")
 n = 10000
 
 
-eps <- rmvnorm(n, c(0,0), matrix(c(1,-0.7,-0.7,1), 2, 2))
-xs <- -1 *runif(n)
-ys <- xs + eps[,1] < 0
-xo <- -1 *runif(n)
-yoX <- xo + eps[,2]
-yo <- yoX*(ys > 0)
+eps <- mvrnorm(n, c(0,0), matrix(c(1,-0.7,-0.7,1), 2, 2))
+xs <- -10 *runif(n) # independant (e.g. intra.trade)
+x2s <- 10 *runif(n) # NTM
+ys <- x2s + xs + eps[,1] < 0  # censoring (term gamma - tau)
+xo <- 10 *runif(n) # distance
+yoX <- xo + x2s + eps[,2] # dependant (tij) 
+yo <- yoX*(ys > 0) # 
 
-summary( selection(ys~xs, yo ~xo))
+summary(selection(ys~xs + x2s, yo ~xo+x2s))
+
+
+
 use pnorm funciton ev. 
 
 eps <- rmvnorm(n, c(0,0), matrix(c(1,-0.7,-0.7,1), 2, 2))
@@ -34,13 +38,36 @@ bivariate_data <- as.data.frame(mvrnorm(n=nrow(sim.data),
                                         Sigma=matrix(c(10, 4, 4,10), ncol=2)))
 detach("package:MASS")
 
-t <- sim.data %>% select(c("total.revealed","distw_harmonic","contig","comlang_ethno",
+t <- sim %>% select(c("interventions.revealed","distw_harmonic","contig","comlang_ethno",
                            "comlang_off","comcol","comrelig","fta_wto","landlocked",
-                           "lsci","lpi","geometric_avg_tariff","total","gdp",
-                           "trade.costs","censored"))
+                           "lsci","lpi","geometric_avg_tariff",
+                           "tij","is.censored" ,"intranat.trade"))
 # t$total <- ifelse(t$total == 0, 20, t$total)
 # t$total <- rnorm(nrow(t), 100, 20)
 #t <- t %>% filter(total > 0)
+
+t$tij  <- 100 + b_0 + b_1 * t$interventions.revealed + b_7 * t$comcol + b_10 * t$landlocked + bivariate_data$V1
+t$ys  <-  (1 * t$intranat.trade) - t$tij + bivariate_data$V2 < 0
+t$yoX <-  t$tij
+t$yo  <- t$yoX * (t$ys > 0) # 
+
+
+t_out <- sampleSelection::selection(data = t,
+                                    selection = ys ~ interventions.revealed  + fta_wto + comcol + landlocked + intranat.trade, 
+                                    outcome =   yo ~ interventions.revealed  + fta_wto + comcol + landlocked)
+
+
+summary(t_out)
+
+
+
+
+t <- sim %>% select(c("interventions.revealed","distw_harmonic","contig","comlang_ethno",
+                      "comlang_off","comcol","comrelig","fta_wto","landlocked",
+                      "lsci","lpi","geometric_avg_tariff",
+                      "tij","is.censored" ,"total"))
+
+
 library(MASS)
 bivariate_data <- as.data.frame(mvrnorm(n=nrow(t),
                                         mu=c(0, 0),
