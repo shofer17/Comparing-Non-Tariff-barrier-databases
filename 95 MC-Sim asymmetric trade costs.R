@@ -19,6 +19,8 @@ trade.costs <- readRDS(file = paste0(path.data.out, "Trade Costs Processed.RData
 controls <- readRDS(file = paste0(path.data.out, "Controls cleaned CEPII grid.RData"))
 GTA.coverage <- readxl::read_excel(path = paste0(path.data.out, "Country measurement index total.xlsx"))
 GTA <- readRDS(file = paste0(path.data.out, "GTA_asymmetric_isic.RData"))
+GTA.coverage_2 <- readxl::read_xlsx(path = paste0(path.data.out, "GTA_Measurement_index.xlsx"))
+
 
 # 2. preliminary checks --------------------------------------------------------
 # check if assumed relationship (higher share of NAs in trade costs --> higher trade costs, lower GDP)
@@ -88,7 +90,7 @@ a <- 0.9
 
 GTA.coverage <- GTA.coverage %>% 
   filter(chapter == "D") %>%
-  left_join(unique(GTA[, c("country.1","year", "gdp_o")]), by = c("country" = "country.1", "year" = "year"))
+  left_join(unique(controls[, c("country.1","year", "gdp_o")]), by = c("country" = "country.1", "year" = "year"))
   
 CRI_max <- max(GTA.coverage$CRI_sqrt[GTA.coverage$country == "USA"])
 GTA.coverage$simulated.interventions <- CRI_max * sqrt(GTA.coverage$gdp_o)/a
@@ -149,6 +151,16 @@ GTA.total <- data.out %>%
 
 GTA.total$old.int.trade <- GTA.total$intranat.trade^(14)
 GTA.total$old.int.trade <- GTA.total$old.int.trade^(1/10)
+
+rm(data.out, grid.observed, controls)
+
+
+
+#saveRDS(GTA.total, file = paste0(path.data.reg, "GTA_final_mc.Rds"))
+GTA.total <- readRDS(file = paste0(path.data.reg, "GTA_final_mc.Rds"))
+GTA.total <- GTA.total %>% 
+  left_join(GTA.coverage_2, by = c("country.1", "country.2", "chapter", "year"))
+
 ### Regresson ------------------------------------------------------------------
 b_0 <- 500
 b_1 <- 0.1 # measures 
@@ -168,14 +180,12 @@ perc.not.censored.real <- sum(!is.na(trade.costs$tij))/nrow(trade.costs)
 
 gamma <- 7000000000000
 #get error term
-
+GTA.total$CRI <- NA
 sim <- GTA.total %>%
   filter(!is.na(geometric_avg_tariff))%>%
   filter(!is.na(lpi)) %>%
   select(-c(all_of(selected.countries[!selected.countries %in% "ZWE"])))%>%
   select(-c(all_of(paste0("year_",years.observation))))
-
-names(sim)[names(sim) == "number.of.interventions"] <- "int"
 
 bivariate_data <- as.data.frame(MASS::mvrnorm(n=nrow(sim),
                                         mu=c(0, 0),
@@ -192,20 +202,47 @@ sum(na.omit(sim$is.not.censored)/nrow(sim))
 sim$tij.censored <- sim$tij * (sim$is.not.censored  > 0) 
 sim$tij.censored.na <- ifelse(sim$is.not.censored  > 0, sim$tij, NA)
 
-mc.ols.pure <- lm(data = sim,                  tij_pure  ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols.pure)
 
+# Revealed interventions
+mc.ols.rev <- lm(data = sim,                      tij.censored.na  ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols.rev)
+mc.heckit.rev <- sampleSelection::selection(data = sim,
+                                    selection = is.not.censored ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff + intranat.trade, 
+                                    outcome =   tij.censored.na ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff
+                                    )
+summary(mc.heckit.rev)
+
+
+# Revealed interventions + weights
+mc.ols.rev.w <- lm(data = sim,                       tij.censored.na  ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff, weights = CRI_sqrt_gm); summary(mc.ols.rev.w)
+mc.heckit.w <- sampleSelection::selection(data = sim,
+                                        selection = is.not.censored ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff + intranat.trade, 
+                                        outcome =   tij.censored.na ~ interventions.revealed + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff,
+                                        weights =   sim$CRI_sqrt_gm
+                                        ); summary(mc.heckit.w)
+
+
+
+# True interventions
+mc.ols.pure <- lm(data = sim,                  tij_pure  ~        int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols.pure)
 mc.ols <- lm(data = sim,                       tij.censored.na  ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff); summary(mc.ols)
 mc.heckit <- sampleSelection::selection(data = sim,
-                                    selection = is.not.censored ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff + intranat.trade, 
-                                    outcome =   tij.censored.na ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff
-                                    )
+                                        selection = is.not.censored ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff + intranat.trade, 
+                                        outcome =   tij.censored.na ~ int + comlang_ethno  + fta_wto+ comlang_off + comcol + lsci + lpi + geometric_avg_tariff
+)
 summary(mc.heckit)
 
 
-saveRDS(list(mc.ols, mc.heckit, mc.ols.pure), file = paste0(path.data.out, "MC_results.Rds"))
+regressions <- list(mc.ols.rev, mc.heckit.rev, mc.ols.rev.w, mc.heckit.w, mc.ols, mc.heckit,  mc.ols.pure)
+
+saveRDS(regressions, file = paste0(path.data.out, "MC_results.Rds"))
 
 library(texreg)
-texreg(list(mc.ols, mc.heckit, mc.ols.pure))
+texreg(regressions)
+
+summary(mc.heckit.rev$twoStep$lm) # get R2
+summary(mc.heckit.w$twoStep$lm)
+summary(mc.heckit$twoStep$lm)
+
 
 ggplot(data= sim, aes(x = interventions.revealed, y = CRI_sqrt_gm_harmful))+
   geom_point()+
