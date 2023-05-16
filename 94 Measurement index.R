@@ -97,7 +97,6 @@ saveRDS(GTA, file = paste0(path.data.out, "GTA_interventions_total.Rds"))
 GTA <- readRDS(file = paste0(path.data.out, "GTA_interventions_total.Rds"))
 
 TRAINS <- grid.coverage %>%
-  select(-gta.evaluation)%>%
   unique()%>%
   left_join(TRAINS, by = c("country" ="iso_code" , "year" = "years.in.force", "chapter"))%>%
   mutate(measure.id = ifelse(is.na(measure.id), 0, measure.id))%>%
@@ -108,15 +107,17 @@ TRAINS <- grid.coverage %>%
 GTA <- GTA %>%
   mutate(CRI = intervention.id/gdp_o)%>%
   mutate(CRI_sqrt = intervention.id/sqrt(gdp_o))%>% 
+  mutate(CRI_log = intervention.id/log(gdp_o))%>% 
   select(-c(gdp_o))
   
 TRAINS <- TRAINS %>%
   mutate(CRI = measure.id/gdp_o)%>%
-  mutate(CRI_sqrt = measure.id/sqrt(gdp_o))%>% 
+  mutate(CRI_sqrt = measure.id/sqrt(gdp_o))%>%
+  mutate(CRI_log = measure.id/log(gdp_o))%>% 
   select(-c(measure.id, gdp_o))
 
 
-writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index total.xlsx"))
+writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index total.xlsx")) #For MC Sim
 GTA <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index total.xlsx"))
 
 
@@ -130,6 +131,8 @@ GTA <- GTA %>%
 
 GTA$CRI_sqrt_gm <- apply(GTA[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
 GTA$CRI_sqrt <- apply(GTA[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) mean(x))
+GTA$CRI_log_gm <- apply(GTA[, c("CRI_log.x", "CRI_log.y")], 1, FUN = function(x) exp(mean(log(x))))
+GTA$CRI_log <- apply(GTA[, c("CRI_log.x", "CRI_log.y")], 1, FUN = function(x) mean(x))
 GTA$CRI_gm <- apply(GTA[, c("CRI.x", "CRI.y")], 1, FUN = function(x) exp(mean(log(x))))
 GTA$CRI <- apply(GTA[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
 #GTA$intervention.geom.mean <- apply(GTA[, c("intervention.id.x", "intervention.id.y")], 1, FUN = function(x) exp(mean(log(x))))
@@ -137,8 +140,7 @@ GTA$CRI <- apply(GTA[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
 
 
 
-GTA <- GTA %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, intervention.id.x, intervention.id.y))
-
+GTA <- GTA %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, CRI_log.x, CRI_log.y, intervention.id.x, intervention.id.y))
 
 
 help <- merge(grid, TRAINS, by.x = c("country.1", "year", "chapter"), 
@@ -151,9 +153,11 @@ TRAINS <- TRAINS %>%
 
 TRAINS$CRI_sqrt_gm <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) exp(mean(log(x))))
 TRAINS$CRI_sqrt <- apply(TRAINS[, c("CRI_sqrt.x", "CRI_sqrt.y")], 1, FUN = function(x) mean(x))
+TRAINS$CRI_log_gm <- apply(TRAINS[, c("CRI_log.x", "CRI_log.y")], 1, FUN = function(x) exp(mean(log(x))))
+TRAINS$CRI_log <- apply(TRAINS[, c("CRI_log.x", "CRI_log.y")], 1, FUN = function(x) mean(x))
 TRAINS$CRI_gm <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) exp(mean(log(x))))
 TRAINS$CRI <- apply(TRAINS[, c("CRI.x", "CRI.y")], 1, FUN = function(x) mean(x))
-TRAINS <- TRAINS %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y))
+TRAINS <- TRAINS %>% select(-c(CRI.x, CRI.y,CRI_sqrt.x, CRI_sqrt.y, CRI_log.x, CRI_log.y))
 
 
 
