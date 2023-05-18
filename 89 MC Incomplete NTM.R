@@ -74,6 +74,91 @@ ggplot(sim, aes(x = interventions.revealed, y = tij))+
   geom_point()+
   geom_smooth(aes(x = interventions.revealed, color = "NTMS_discovered"), method = "lm")+  
   geom_smooth(aes(x = interventions.revealed, color = "NTMS_discovered_w", weight=CRI_sqrt_gm), method = "lm")+
-  geom_smooth(aes(x = int, color = "True"), method = "lm")
+  geom_smooth(aes(x = int, color = "True"), method = "lm")+
+  theme_minimal()
+
+sim.red <- sim %>%
+  filter(gdp_d > 1000000000 & gdp_o > 1000000000)
+
+ggplot(sim.red, aes(x = interventions.revealed, y = tij))+
+  geom_point()+
+  geom_smooth(aes(x = interventions.revealed, color = "NTMS_discovered"), method = "lm")+  
+  geom_smooth(aes(x = interventions.revealed, color = "NTMS_discovered_w", weight=CRI_sqrt_gm), method = "lm")+
+  geom_smooth(aes(x = int, color = "True"), method = "lm")+
+  theme_minimal()
 
 
+# V2. --------------------------------------------------------------------------
+
+
+n = 1000
+data <- data.frame("id" = 1:n,
+                   "NTM" = 1:n)
+data <- data %>%
+  mutate(tij = NTM * 1)%>%
+  mutate(NTM_prop = NTM * 0.5) %>%
+  mutate(NTM_overprop = round(NTM * (NTM/n)))%>%
+  mutate(NTM_underprop = round(NTM * (1/NTM)))%>%
+  pivot_longer(cols = c(2,4,5,6), values_to = "NTMs", names_to = "Variable")
+
+p1 <- ggplot(data, aes(x = NTMs, y = tij, color = Variable))+
+  geom_point()+
+  theme_minimal()+
+  theme(title = element_text("Distributions of knowledge about NTMs"), legend.position = "None")+
+  ylab("Trade Costs")+
+  xlab("Number of NTMs implemented")+
+  scale_color_manual(values = c(standard.colors), 
+                     name = "Knowledge about NTMs",
+                     labels = c("All known", "Overproportional to number implemented", "Proportional to number implemented", "Underproportional to number implemented"))
+
+removed <- round(rnorm(10000, 1000, 500))
+data2 <- data %>%
+  filter(!id >1000)%>%
+  filter(!id %in% removed)%>%
+  filter(Variable %in% c("NTM", "NTM_overprop" ))%>%
+  pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
+  
+  
+p2 <- ggplot(data2, aes(y = tij))+
+  geom_point(aes(x = NTM), color = standard.colors[1])+
+  geom_point(aes(NTM_overprop), color = standard.colors[2])+
+  geom_smooth(aes(x = NTM_overprop), method = "lm", color = standard.colors[2])+  
+  geom_smooth(aes(x = NTM_overprop, weight = NTM), method = "lm", color = standard.colors[3])+  
+  theme_minimal()+
+  theme(title = element_text("Distributions of knowledge about NTMs"))+
+  ylab("Trade Costs")+
+  xlab("Number of NTMs implemented")+
+  scale_color_manual(name = "Knowledge about NTMs",
+                     labels = c("All known", "Overproportional to number implemented", "Ha"),
+                     guide= F)
+p2
+
+
+
+removed <- round(rnorm(5000, 0, 500))
+data3 <- data %>%
+  filter(!id <0)%>%
+  filter(!id %in% removed)%>%
+  filter(Variable %in% c("NTM", "NTM_overprop" ))%>%
+  pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
+
+
+p3 <- ggplot(data3, aes(y = tij))+
+  geom_point(aes(x = NTM), color = standard.colors[1])+
+  geom_point(aes(NTM_overprop), color = standard.colors[2])+
+  geom_smooth(aes(x = NTM_overprop), method = "lm", color = standard.colors[2])+  
+  geom_smooth(aes(x = NTM_overprop, weight = NTM), method = "lm", color = standard.colors[3])+  
+  theme_minimal()+
+  theme(title = element_text("Distributions of knowledge about NTMs"))+
+  ylab("Trade Costs")+
+  xlab("Number of NTMs implemented")+
+  scale_color_manual(name = "Knowledge about NTMs",
+                     labels = c("All known", "Overproportional to number implemented", "Ha"))
+p3
+
+library(cowplot)
+plot_grid(p1,p2,p3, rows = 3)
+gta_plot_saver(plot = p_out, 
+               path = path.plot, 
+               name = "MC_Unknown_NTM", 
+               png = T)

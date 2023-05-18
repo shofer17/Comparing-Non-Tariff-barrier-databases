@@ -11,6 +11,9 @@ years <- 2005:2019
 base <- 2005:2007
 years.observation <- 2009:2019
 gta_colour_palette()
+standard.colors <- c(gta_colour$blue[2], gta_colour$qualitative[7], gta_colour$qualitative[5], gta_colour$grey[1])
+
+
 evaluation <- c("harmful", "liberalising")
 # Paths
 path.data.raw <- "1 data/0 data raw/"
