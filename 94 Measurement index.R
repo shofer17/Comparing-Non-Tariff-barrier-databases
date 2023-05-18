@@ -118,7 +118,7 @@ TRAINS <- TRAINS %>%
 
 
 writexl::write_xlsx(GTA, path = paste0(path.data.out, "Country measurement index total.xlsx")) #For MC Sim
-GTA <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index total.xlsx"))
+CRI_index <- readxl::read_xlsx(path = paste0(path.data.out, "Country measurement index total.xlsx"))
 
 
 #make bilateral
