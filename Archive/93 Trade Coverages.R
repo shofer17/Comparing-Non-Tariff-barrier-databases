@@ -1,3 +1,7 @@
+# The thesis originally wanted to compare the results to trade coverages. 
+# However, as it became clear that that was out of scope, the approach was no 
+# longer followed. Therefore, the code here is incomplete. 
+
 rm(list = ls())
 
 #detach("package:gtalibrary", unload=TRUE)

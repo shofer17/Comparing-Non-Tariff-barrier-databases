@@ -1,3 +1,6 @@
+# This file helps with establishing the common ground between the datasets
+# The results are saved and the loaded in from 00 Terms and Definitions.R
+
 rm(list = ls())
 
 path.data.raw <- "1 data/0 data raw/"

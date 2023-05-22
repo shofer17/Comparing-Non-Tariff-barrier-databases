@@ -1,3 +1,8 @@
+# This scripts adds affected countries to TRAINS data observations. It tries to follow
+# the GTAs data process in assigning affected countries. However, as the complete 
+# process in detail, in the scope of the thesis, not possible to implement, 
+# a simpler process proxying the GTA process was used. 
+
 library(sqldf)
 
 rm(list = ls())

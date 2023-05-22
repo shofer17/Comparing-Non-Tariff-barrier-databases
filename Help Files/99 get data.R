@@ -3,6 +3,9 @@
 # Purpose:  
 # This script scrapes and downloads data for analysis if a simpler way 
 # was not possible.  
+# Please note: The scraper does not work properly because of some peculiarities of the 
+# TRAINS site (e.g. after Taiwan is selected in the dropdown, so is automatically China).
+# Therefore, the TRAINS was downloaded by hand partially. 
 
 # library(httr)
 # library(jsonlite)

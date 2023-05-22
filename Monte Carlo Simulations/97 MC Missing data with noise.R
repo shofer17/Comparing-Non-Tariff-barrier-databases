@@ -1,4 +1,6 @@
-# This file simulates data and serves as a decision aid for model specification
+# This file simulates data and serves as a decision aid for model specification.
+# It simulates what happens if there is non-random censoring with noise and displays 
+# it in a plot used for the thesis. 
 
 library(ggplot2)
 library(gtalibrary)
@@ -56,7 +58,7 @@ p <- ggplot(data = data, aes(x = x, y = y, color = key))+
   scale_color_manual(values = c(gta_colour$qualitative[7], gta_colour$blue[2]),
                      labels = c("Without upper limit",paste0("With upper limit at ", threshold)))+
   labs(colour="")+
-  gta_theme(legend.position = "bottom")+
+  gta_theme()+
   ggtitle("The effect of a threshold for missing values in parameter estimation")+
   facet_wrap(.~group)
 p

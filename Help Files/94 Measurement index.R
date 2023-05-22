@@ -1,4 +1,5 @@
-# This file creates the measurement index
+# This file creates the Comprehensiveness of Measurement Index (CRI) as described 
+# in the thesis. 
 
 rm(list = ls())
 source("BA_Thesis_code/00 Terms and Definitions.R")

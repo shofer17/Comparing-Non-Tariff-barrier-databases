@@ -1,7 +1,9 @@
 # Author: Silvan Hofer
 # Date: 6. February 2023
 # Purpose: 
-# This script create all help files needed for data cleaning and analysis. 
+# This script creates help files needed for data cleaning and analysis, like 
+# name conversion to ISO or ISIC to HS. 
+
 
 
 library(xml2) #webscraping WTO names table
