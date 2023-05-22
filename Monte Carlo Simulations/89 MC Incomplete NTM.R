@@ -89,7 +89,7 @@ ggplot(sim.red, aes(x = interventions.revealed, y = tij))+
 
 
 # V2. --------------------------------------------------------------------------
-
+library(tidyverse)
 
 n = 1000
 data <- data.frame("id" = 1:n,
@@ -101,36 +101,42 @@ data <- data %>%
   mutate(NTM_underprop = round(NTM * (1/NTM)))%>%
   pivot_longer(cols = c(2,4,5,6), values_to = "NTMs", names_to = "Variable")
 
+
 p1 <- ggplot(data, aes(x = NTMs, y = tij, color = Variable))+
   geom_point()+
   theme_minimal()+
-  theme(title = element_text("Distributions of knowledge about NTMs"), legend.position = "None")+
+  ggtitle("Distributions of knowledge about NTMs")+
   ylab("Trade Costs")+
   xlab("Number of NTMs implemented")+
   scale_color_manual(values = c(standard.colors), 
                      name = "Knowledge about NTMs",
-                     labels = c("All known", "Overproportional to number implemented", "Proportional to number implemented", "Underproportional to number implemented"))
+                     labels = c("Complete", "More on top", "Proportional", "More on bottom"))
+
+p1
 
 removed <- round(rnorm(10000, 1000, 500))
 data2 <- data %>%
   filter(!id >1000)%>%
   filter(!id %in% removed)%>%
-  filter(Variable %in% c("NTM", "NTM_overprop" ))%>%
-  pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
+  filter(Variable %in% c("NTM", "NTM_overprop","NTM_prop" ))%>%
+  mutate(NTM_prop = NA)
+  #pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
   
   
-p2 <- ggplot(data2, aes(y = tij))+
-  geom_point(aes(x = NTM), color = standard.colors[1])+
-  geom_point(aes(NTM_overprop), color = standard.colors[2])+
-  geom_smooth(aes(x = NTM_overprop), method = "lm", color = standard.colors[2])+  
-  geom_smooth(aes(x = NTM_overprop, weight = NTM), method = "lm", color = standard.colors[3])+  
+p2 <- ggplot(data2, aes(y = tij, x = NTMs))+
+  geom_point(aes(color = Variable))+
+  #geom_point(aes(NTM_overprop), color = standard.colors[2])+
+  geom_smooth(data = data2[data2$Variable == "NTM_overprop",], method = "lm", color = standard.colors[2])+  
+  geom_smooth(data = data2[data2$Variable == "NTM_overprop",], aes(weight = id), method = "lm", color = standard.colors[3])+  
+  geom_smooth(data = data2[data2$Variable == "NTM",], aes(weight = id, color = Variable), method = "lm")+  
   theme_minimal()+
-  theme(title = element_text("Distributions of knowledge about NTMs"))+
-  ylab("Trade Costs")+
+  ggtitle("Regressions with bottom-heavy data")+
+    ylab("Trade Costs")+
   xlab("Number of NTMs implemented")+
-  scale_color_manual(name = "Knowledge about NTMs",
-                     labels = c("All known", "Overproportional to number implemented", "Ha"),
-                     guide= F)
+  scale_color_manual(name = "Regression based on:",
+                     labels = c("Complete data", "Available data", "Available data\n w.weights"),
+                     #guide= T,
+                     values = standard.colors)
 p2
 
 
@@ -139,26 +145,82 @@ removed <- round(rnorm(5000, 0, 500))
 data3 <- data %>%
   filter(!id <0)%>%
   filter(!id %in% removed)%>%
-  filter(Variable %in% c("NTM", "NTM_overprop" ))%>%
-  pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
+  filter(Variable %in% c("NTM", "NTM_overprop","NTM_prop" ))%>%
+  mutate(NTMs = ifelse(Variable == "NTM_prop", NA, NTMs))
 
 
-p3 <- ggplot(data3, aes(y = tij))+
-  geom_point(aes(x = NTM), color = standard.colors[1])+
-  geom_point(aes(NTM_overprop), color = standard.colors[2])+
-  geom_smooth(aes(x = NTM_overprop), method = "lm", color = standard.colors[2])+  
-  geom_smooth(aes(x = NTM_overprop, weight = NTM), method = "lm", color = standard.colors[3])+  
+p3 <- ggplot(data3, aes(y = tij, x = NTMs))+
+  geom_point(aes(color = Variable))+
+  #geom_point(aes(NTM_overprop), color = standard.colors[2])+
+  geom_smooth(data = data3[data3$Variable == "NTM_overprop",], method = "lm", color = standard.colors[2])+  
+  geom_smooth(data = data3[data3$Variable == "NTM_overprop",], aes(weight = id), method = "lm", color = standard.colors[3])+  
+  geom_smooth(data = data3[data3$Variable == "NTM",], aes(weight = id, color = Variable), method = "lm")+  
   theme_minimal()+
-  theme(title = element_text("Distributions of knowledge about NTMs"))+
+  ggtitle("Regressions with top-heavy data")+
   ylab("Trade Costs")+
   xlab("Number of NTMs implemented")+
-  scale_color_manual(name = "Knowledge about NTMs",
-                     labels = c("All known", "Overproportional to number implemented", "Ha"))
+  scale_color_manual(name = "Regression based on:",
+                     labels = c("Complete data", "Available data", "Available data\n w.weights"),
+                     #guide= T,
+                     values = standard.colors)
 p3
 
 library(cowplot)
-plot_grid(p1,p2,p3, rows = 3)
+# plot_grid(p1,p2,p3, rows = 3)
+# gta_plot_saver(plot = p_out, 
+#                path = path.plot, 
+#                name = "MC_Unknown_NTM", 
+#                png = T)
+
+
+#  example of negative case ----------------------------------------------------
+
+
+
+
+n = 1000
+data4 <- data.frame("id" = 1:n,
+                   "NTM" = 1:n)
+data4 <- data4 %>%
+  mutate(tij = NTM * 1 + rnorm(n, 700, 300))%>%
+  mutate(tij = (tij > 0)*tij)%>%
+  #mutate(NTM_prop = NTM * 0.5) %>%
+  mutate(NTM_overprop = ifelse(tij > 1200, 0, NTM))%>%
+  #mutate(NTM_underprop = round(NTM * (1/NTM)))%>%
+  pivot_longer(cols = c(2,4), values_to = "NTMs", names_to = "Variable")
+
+# removed <- round(rnorm(10000, 0, 500))
+# data <- data %>%
+#   filter(!id >1000)%>%
+#   filter(!id %in% removed)
+#   #filter(Variable %in% c("NTM", "NTM_overprop" ))%>%
+#   #pivot_wider(id_cols = 1:2, names_from = "Variable", values_from = "NTMs")
+# 
+
+
+
+
+p4 <- ggplot(data4, aes(x = NTMs, y = tij))+
+  geom_point(aes(color = Variable))+
+  geom_smooth(method = "lm", aes(color = Variable))+
+  theme_minimal()+
+  ggtitle("Regressions noise and limited information")+
+  ylab("Trade Costs")+
+  xlab("Number of NTMs implemented")+
+  scale_color_manual(values = c(standard.colors), 
+                     name = "Regression",
+                     labels = c("Complete data", "No data if\nTrade costs > 1500"))
+p4
+
+
+
+library(cowplot)
+p_out <- plot_grid(p1,p2,p3,p4, rows = 4)
+p_out
 gta_plot_saver(plot = p_out, 
                path = path.plot, 
                name = "MC_Unknown_NTM", 
-               png = T)
+               png = T, 
+               width = 21, 
+               height = 30)
+
